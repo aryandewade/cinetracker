@@ -1,35 +1,60 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    --color-background: #ffffff;
+    --color-surface: #f3f4f6;
+    --color-primary: #000000;
+    --color-text-primary: #111827;
+    --color-text-secondary: #6b7280;
+    --color-border: #e5e7eb;
+
+    /* Rating Colors - RGB values for opacity support */
+    --color-rating-skip: 244 114 182;
+    /* Pink-400 */
+    --color-rating-timepass: 251 191 36;
+    /* Amber-400 */
+    --color-rating-go: 52 211 153;
+    /* Emerald-400 */
+    --color-rating-perfection: 192 132 252;
+    /* Purple-400 */
+  }
+
+  .dark {
+    --color-background: #0b0f19;
+    --color-surface: #1e293b;
+    --color-primary: #ffffff;
+    --color-text-primary: #f3f4f6;
+    --color-text-secondary: #94a3b8;
+    --color-border: #334155;
+  }
+}
+
 body {
-  background-color: #020617;
-  color: #e5e7eb;
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: 'Inter', sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background-image: radial-gradient(
-    rgba(255, 255, 255, 0.12) 1px,
-    transparent 1px
-  );
-  background-size: 18px 18px;
-  opacity: 0.25;
-  z-index: -2;
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
 }
 
-body::after {
-  content: "";
-  position: fixed;
-  top: -30%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 600px;
-  height: 600px;
-  background: rgba(59, 130, 246, 0.25);
-  filter: blur(140px);
-  z-index: -1;
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
 }
