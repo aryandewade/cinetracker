@@ -1,16 +1,16 @@
 import MediaCard from "./MediaCard";
 
-const YearGroup = ({ year, months, onDelete, onEdit }) => {
+const YearGroup = ({ year, months, onDelete, onEdit, onViewDetails }) => {
   return (
-    <div className="mb-12 animate-fade-in">
-      <h2 className="text-4xl font-bold text-text-primary mb-6 border-b border-border pb-2 opacity-40 hover:opacity-100 transition-opacity">
+    <div className="mb-12 animate-fade-in select-none">
+      <h2 className="text-4xl font-extrabold text-text-primary mb-6 border-b border-border dark:border-slate-800/80 pb-2 opacity-30 hover:opacity-80 transition-opacity">
         {year}
       </h2>
       {Object.keys(months)
         .sort((a, b) => b - a)
         .map((month) => (
           <div key={month} className="mb-8">
-            <h3 className="text-lg font-medium text-text-secondary mb-4 uppercase tracking-wider pl-1">
+            <h3 className="text-sm font-bold text-text-secondary mb-4 uppercase tracking-wider pl-1">
               {new Date(0, month).toLocaleString("default", {
                 month: "long",
               })}
@@ -22,6 +22,7 @@ const YearGroup = ({ year, months, onDelete, onEdit }) => {
                   item={item}
                   onDelete={onDelete}
                   onEdit={onEdit}
+                  onViewDetails={onViewDetails}
                 />
               ))}
             </div>

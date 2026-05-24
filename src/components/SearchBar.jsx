@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { searchOMDB } from "../api/omdb";
+import { searchTMDB } from "../api/tmdb";
 import Loader from "./Loader";
 import { FaPlus, FaTimes } from "react-icons/fa";
 
@@ -17,7 +17,7 @@ const SearchBar = ({ onSelect }) => {
     setResults([]);
 
     try {
-      const data = await searchOMDB(query);
+      const data = await searchTMDB(query);
       if (!data.length) {
         setError("No results found");
       } else {

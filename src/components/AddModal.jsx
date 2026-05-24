@@ -5,37 +5,38 @@ const RATINGS = ["Skip", "Timepass", "Go for it", "Perfection"];
 const AddModal = ({ item, onClose, onSave, isEdit = false }) => {
   const [date, setDate] = useState("");
   const [rating, setRating] = useState("");
+  const [review, setReview] = useState("");
   const [isWatchLater, setIsWatchLater] = useState(false);
 
   useEffect(() => {
     if (item) {
       setDate(item.watchedOn || new Date().toISOString().split("T")[0]);
       setRating(item.rating || "");
+      setReview(item.review || "");
       setIsWatchLater(item.status === "watch-later");
     }
   }, [item]);
-
 
   const handleSave = () => {
     onSave({
       ...item,
       watchedOn: isWatchLater ? null : date,
       rating: isWatchLater ? null : rating,
+      review: isWatchLater ? null : review,
       status: isWatchLater ? "watch-later" : "watched",
     });
   };
 
-
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-      <div className="bg-surface dark:bg-slate-900 border border-border p-6 rounded-2xl w-80 shadow-2xl">
+      <div className="bg-surface dark:bg-slate-900 border border-border p-6 rounded-2xl w-[360px] md:w-[400px] shadow-2xl transition-all">
         <h2 className="text-xl font-bold mb-6 text-text-primary">
           {isEdit ? "Edit Entry" : "Add Movie"}
         </h2>
 
         {!isWatchLater && (
           <div className="mb-4">
-            <label className="block text-xs font-medium text-text-secondary uppercase mb-1">Watched On</label>
+            <label className="block text-xs font-semibold text-text-secondary uppercase mb-1">Watched On</label>
             <input
               type="date"
               className="w-full bg-slate-100 dark:bg-slate-800 border border-transparent focus:border-text-secondary outline-none p-2 rounded-lg text-text-primary transition-colors"
@@ -46,8 +47,8 @@ const AddModal = ({ item, onClose, onSave, isEdit = false }) => {
         )}
 
         {!isWatchLater && (
-          <div className="mb-6">
-            <label className="block text-xs font-medium text-text-secondary uppercase mb-1">Rating</label>
+          <div className="mb-4">
+            <label className="block text-xs font-semibold text-text-secondary uppercase mb-1">Rating</label>
             <select
               className="w-full bg-slate-100 dark:bg-slate-800 border border-transparent focus:border-text-secondary outline-none p-2 rounded-lg text-text-primary transition-colors appearance-none cursor-pointer"
               value={rating}
@@ -61,13 +62,25 @@ const AddModal = ({ item, onClose, onSave, isEdit = false }) => {
           </div>
         )}
 
+        {!isWatchLater && (
+          <div className="mb-4">
+            <label className="block text-xs font-semibold text-text-secondary uppercase mb-1">Review & Notes</label>
+            <textarea
+              className="w-full bg-slate-100 dark:bg-slate-800 border border-transparent focus:border-text-secondary outline-none p-3 rounded-lg text-text-primary transition-colors h-24 resize-none text-sm placeholder:text-text-secondary/40 focus:ring-1 focus:ring-text-secondary"
+              placeholder="Write your review, thoughts, or private notes here..."
+              value={review}
+              onChange={(e) => setReview(e.target.value)}
+            />
+          </div>
+        )}
+
         <div className="mb-6 flex items-center gap-2">
           <input
             type="checkbox"
             id="watchLater"
             checked={isWatchLater}
             onChange={(e) => setIsWatchLater(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 text-text-primary focus:ring-text-secondary"
+            className="w-4 h-4 rounded border-gray-300 text-text-primary focus:ring-text-secondary cursor-pointer"
           />
           <label htmlFor="watchLater" className="text-sm text-text-primary cursor-pointer select-none">Add to Watch Later</label>
         </div>
@@ -82,7 +95,6 @@ const AddModal = ({ item, onClose, onSave, isEdit = false }) => {
           >
             {isEdit ? "Update" : "Save"}
           </button>
-
         </div>
       </div>
     </div>
