@@ -1,9 +1,47 @@
 const http = require("http");
+const https = require("https");
 const url = require("url");
+const fs = require("fs");
+const path = require("path");
+
+// Load .env file into process.env (Backend Only)
+try {
+  const envPath = path.join(__dirname, "..", ".env");
+  if (fs.existsSync(envPath)) {
+    const envLines = fs.readFileSync(envPath, "utf8").split("\n");
+    envLines.forEach(line => {
+      const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+      if (match) {
+        const key = match[1];
+        let value = match[2] || "";
+        value = value.trim().replace(/^["']|["']$/g, "");
+        process.env[key] = value;
+      }
+    });
+  }
+} catch (e) {}
+
 const db = require("./db.cjs");
 const { generateToken, verifyToken, hashPassword, verifyPassword } = require("./jwt.cjs");
 
 const PORT = process.env.PORT || 5000;
+const TMDB_API_KEY = process.env.TMDB_API_KEY || "8265bd1679663a7ea12ac168da84d2e8";
+
+function fetchHttps(targetUrl) {
+  return new Promise((resolve, reject) => {
+    https.get(targetUrl, (response) => {
+      let data = "";
+      response.on("data", (chunk) => { data += chunk; });
+      response.on("end", () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch (e) {
+          reject(e);
+        }
+      });
+    }).on("error", (err) => reject(err));
+  });
+}
 
 function parseBody(req) {
   return new Promise((resolve, reject) => {
@@ -56,6 +94,88 @@ const server = http.createServer(async (req, res) => {
   const method = req.method;
 
   try {
+    // ----------------------------------------------------
+    // TMDB API Secure Proxy Routes (Hides API Key from Browser)
+    // ----------------------------------------------------
+    if (method === "GET" && path === "/api/tmdb/search") {
+      const searchQuery = parsedUrl.query.query;
+      if (!searchQuery) {
+        return sendJson(res, 400, { error: "Query parameter is required" });
+      }
+
+      const tmdbUrl = `https://api.tmdb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(searchQuery)}`;
+      const tmdbData = await fetchHttps(tmdbUrl);
+      const results = (tmdbData.results || [])
+        .filter((item) => item.media_type === "movie" || item.media_type === "tv")
+        .map((item) => {
+          const releaseYear = (item.release_date || item.first_air_date || "").split("-")[0] || "N/A";
+          return {
+            id: `tmdb-${item.id}`,
+            imdbID: `tmdb-${item.id}`,
+            title: item.title || item.name,
+            Title: item.title || item.name,
+            year: releaseYear,
+            Year: releaseYear,
+            type: item.media_type === "tv" ? "series" : "movie",
+            Type: item.media_type === "tv" ? "series" : "movie",
+            poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : "N/A",
+            Poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : "N/A",
+          };
+        });
+
+      return sendJson(res, 200, { results });
+    }
+
+    if (method === "GET" && path === "/api/tmdb/details") {
+      const id = parsedUrl.query.id;
+      const mediaType = parsedUrl.query.type;
+      if (!id) {
+        return sendJson(res, 400, { error: "ID parameter is required" });
+      }
+
+      let tmdbId = id.replace("tmdb-", "");
+      let type = mediaType === "series" ? "tv" : "movie";
+      const appendToResponse = type === "tv" ? "credits,content_ratings" : "credits,release_dates";
+      const tmdbUrl = `https://api.tmdb.org/3/${type}/${tmdbId}?api_key=${TMDB_API_KEY}&append_to_response=${appendToResponse}`;
+
+      const details = await fetchHttps(tmdbUrl);
+
+      let rated = "G";
+      if (type === "tv") {
+        rated = details.content_ratings?.results?.find((r) => r.iso_3166_1 === "US")?.rating || "TV-PG";
+      } else {
+        const releases = details.release_dates?.results?.find((r) => r.iso_3166_1 === "US")?.release_dates || [];
+        rated = releases.find((r) => r.certification)?.certification || "PG-13";
+      }
+
+      const formattedDetails = {
+        Title: details.title || details.name,
+        Year: (details.release_date || details.first_air_date || "").split("-")[0] || "N/A",
+        Rated: rated,
+        Runtime: details.runtime ? `${details.runtime} min` : details.episode_run_time?.[0] ? `${details.episode_run_time[0]} min` : "N/A",
+        Genre: details.genres?.map((g) => g.name).join(", ") || "N/A",
+        Director: details.credits?.crew?.find((c) => c.job === "Director")?.name || details.created_by?.[0]?.name || "N/A",
+        Writer: details.credits?.crew?.find((c) => c.job === "Writer" || c.job === "Screenplay")?.name || "N/A",
+        Actors: details.credits?.cast?.slice(0, 5).map((a) => a.name).join(", ") || "N/A",
+        Plot: details.overview || "No description available.",
+        Poster: details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : "N/A",
+        imdbRating: details.vote_average ? `${details.vote_average.toFixed(1)}/10` : "N/A",
+        Ratings: [
+          { Source: "TMDb User Score", Value: details.vote_average ? `${(details.vote_average * 10).toFixed(0)}%` : "N/A" },
+          { Source: "Popularity Rank", Value: details.popularity ? details.popularity.toFixed(0) : "N/A" },
+        ],
+        Awards: details.popularity
+          ? `Popularity: ${details.popularity.toFixed(0)} • Votes: ${details.vote_count || 0}`
+          : "N/A",
+        Response: "True",
+      };
+
+      return sendJson(res, 200, formattedDetails);
+    }
+
+    // ----------------------------------------------------
+    // Auth Routes
+    // ----------------------------------------------------
     if (method === "POST" && path === "/api/auth/register") {
       const body = await parseBody(req);
       const { username, email, password, name, avatar, avatarBg, bio } = body;
