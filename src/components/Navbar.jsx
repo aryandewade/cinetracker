@@ -1,4 +1,4 @@
-import { FaChartBar, FaSun, FaMoon, FaUser, FaShareAlt, FaSignOutAlt, FaChevronDown, FaCheck, FaExternalLinkAlt } from "react-icons/fa";
+import { FaChartBar, FaSun, FaMoon, FaUser, FaShareAlt, FaSignOutAlt, FaChevronDown, FaCheck, FaExternalLinkAlt, FaUsers, FaDatabase, FaCloud } from "react-icons/fa";
 import { useEffect, useState, useRef } from "react";
 import logo from "../assets/logo.png";
 
@@ -25,6 +25,9 @@ const Navbar = ({
   onLogout,
   isSharedView = false,
   onExitSharedView,
+  onOpenAuth,
+  onOpenCommunity,
+  authUser = null,
 }) => {
   const [isDark, setIsDark] = useState(true);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -32,7 +35,6 @@ const Navbar = ({
   const dropdownRef = useRef(null);
 
   useEffect(() => {
-    // Check system preference or localStorage
     if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
       setIsDark(true);
       document.documentElement.classList.add('dark');
@@ -43,7 +45,6 @@ const Navbar = ({
   }, []);
 
   useEffect(() => {
-    // Close dropdown on click outside
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setShowDropdown(false);
@@ -74,13 +75,12 @@ const Navbar = ({
     if (!activeProfile) return;
 
     try {
-      // 1. Curate and optimize payload
       const payload = {
         name: activeProfile.name,
         avatar: activeProfile.avatar,
         avatarBg: activeProfile.avatarBg || getBgForEmoji(activeProfile.avatar),
         bio: activeProfile.bio,
-        data: activeProfile.data.map(i => ({
+        data: (activeProfile.data || []).map(i => ({
           id: i.id,
           title: i.title,
           poster: i.poster,
@@ -92,11 +92,9 @@ const Navbar = ({
         }))
       };
 
-      // 2. Compress payload to URL base64 safely
       const base64Data = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
       const shareUrl = `${window.location.origin}${window.location.pathname}?share=${base64Data}`;
 
-      // 3. Copy to clipboard
       navigator.clipboard.writeText(shareUrl).then(() => {
         setToastMessage("Share Link Copied! 🍿");
         setShowDropdown(false);
@@ -154,7 +152,7 @@ const Navbar = ({
           )}
         </div>
 
-        {/* Right Side: Theme, Stats and Profile Switchers */}
+        {/* Right Side: Community, Theme, Stats and Profile Switchers */}
         <div className="flex items-center gap-3">
           
           {/* Shared View Return CTA */}
@@ -166,6 +164,16 @@ const Navbar = ({
               <FaExternalLinkAlt size={10} /> Go to My App
             </button>
           )}
+
+          {/* Community Explore Button */}
+          <button
+            onClick={onOpenCommunity}
+            className="flex items-center gap-1.5 text-xs font-semibold py-2 px-3.5 rounded-full bg-purple-600/10 border border-purple-500/30 text-purple-400 hover:bg-purple-600 hover:text-white transition-all shadow-sm"
+            title="Explore other users and public watchlists"
+          >
+            <FaUsers size={12} />
+            <span>Community</span>
+          </button>
 
           {/* Stats Button */}
           {!isSharedView && activeTab === 'history' && activeProfile && (
@@ -190,80 +198,74 @@ const Navbar = ({
             {isDark ? <FaSun size={12} /> : <FaMoon size={12} />}
           </button>
 
-          {/* Profiles Switcher Dropdown */}
-          {!isSharedView && activeProfile && (
-            <div className="relative" ref={dropdownRef}>
-              <button
-                onClick={() => setShowDropdown(!showDropdown)}
-                className="flex items-center gap-2 p-1 pl-2.5 pr-1 border border-slate-200/50 dark:border-slate-800 rounded-full hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors"
-              >
-                <div className={`w-7 h-7 rounded-full bg-gradient-to-tr ${activeProfile.avatarBg || getBgForEmoji(activeProfile.avatar)} flex items-center justify-center text-sm shadow-md`}>
-                  {activeProfile.avatar}
-                </div>
-                <FaChevronDown size={10} className={`text-text-secondary mr-1.5 transition-transform duration-300 ${showDropdown ? 'rotate-180' : ''}`} />
-              </button>
-
-              {/* Dropdown Menu Box */}
-              {showDropdown && (
-                <div className="absolute right-0 mt-3.5 w-60 bg-surface dark:bg-slate-950 border border-border dark:border-slate-800 rounded-2xl shadow-2xl p-2.5 animate-fade-in text-text-primary z-50">
-                  {/* Current Active Profile Info Header */}
-                  <div className="p-2 border-b border-border dark:border-slate-900 mb-2">
-                    <p className="text-[10px] text-text-secondary font-bold uppercase tracking-wider">Active Profile</p>
-                    <p className="font-extrabold text-sm truncate mt-0.5">{activeProfile.name}</p>
-                    {activeProfile.bio && (
-                      <p className="text-[10px] text-text-secondary/80 mt-0.5 line-clamp-1 italic font-normal">"{activeProfile.bio}"</p>
-                    )}
+          {/* Auth Button or Account Dropdown */}
+          {!authUser ? (
+            <button
+              onClick={onOpenAuth}
+              className="flex items-center gap-2 text-xs font-bold py-2 px-4 rounded-full bg-white/10 dark:bg-white/10 border border-white/20 dark:border-white/20 text-white backdrop-blur-xl hover:bg-white/20 hover:border-white/40 shadow-lg hover:shadow-red-500/10 transition-all duration-300 group"
+            >
+              <FaUser size={11} className="text-red-400 group-hover:scale-110 transition-transform" />
+              <span>Sign In / Register</span>
+            </button>
+          ) : (
+            /* Profiles & Account Switcher Dropdown */
+            !isSharedView && activeProfile && (
+              <div className="relative" ref={dropdownRef}>
+                <button
+                  onClick={() => setShowDropdown(!showDropdown)}
+                  className="flex items-center gap-2 p-1 pl-2.5 pr-1 border border-slate-200/50 dark:border-slate-800 rounded-full hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors"
+                >
+                  <div className={`w-7 h-7 rounded-full bg-gradient-to-tr ${activeProfile.avatarBg || getBgForEmoji(activeProfile.avatar)} flex items-center justify-center text-sm shadow-md`}>
+                    {activeProfile.avatar}
                   </div>
+                  <FaChevronDown size={10} className={`text-text-secondary mr-1.5 transition-transform duration-300 ${showDropdown ? 'rotate-180' : ''}`} />
+                </button>
 
-                  {/* Switch to Profiles */}
-                  {profiles.filter(p => p.id !== activeProfile.id).length > 0 && (
-                    <div className="space-y-1 mb-2">
-                      <p className="text-[9px] text-text-secondary font-bold uppercase tracking-wider px-2 py-1">Switch Profile</p>
-                      {profiles
-                        .filter(p => p.id !== activeProfile.id)
-                        .map(p => (
-                          <button
-                            key={p.id}
-                            onClick={() => {
-                              onSelectProfile(p);
-                              setShowDropdown(false);
-                            }}
-                            className="w-full flex items-center gap-2.5 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-900/60 rounded-xl transition-colors text-left text-xs font-semibold"
-                          >
-                            <div className={`w-6 h-6 rounded-lg bg-gradient-to-tr ${p.avatarBg || getBgForEmoji(p.avatar)} flex items-center justify-center text-xs shadow-sm`}>
-                              {p.avatar}
-                            </div>
-                            <span className="truncate">{p.name}</span>
-                          </button>
-                        ))}
+                {/* Dropdown Menu Box */}
+                {showDropdown && (
+                  <div className="absolute right-0 mt-3.5 w-64 bg-surface dark:bg-slate-950 border border-border dark:border-slate-800 rounded-2xl shadow-2xl p-2.5 animate-fade-in text-text-primary z-50">
+                    {/* Current Active User Info Header */}
+                    <div className="p-2.5 border-b border-border dark:border-slate-900 mb-2 bg-slate-900/40 rounded-xl">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] text-emerald-400 font-extrabold uppercase tracking-wider flex items-center gap-1">
+                          <FaCloud size={10} /> Supabase Cloud Account
+                        </p>
+                        <span className="text-[9px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full font-mono">
+                          @{authUser.username}
+                        </span>
+                      </div>
+                      <p className="font-extrabold text-sm truncate mt-1">{activeProfile.name}</p>
+                      {activeProfile.bio && (
+                        <p className="text-[10px] text-text-secondary/80 mt-0.5 line-clamp-1 italic font-normal">"{activeProfile.bio}"</p>
+                      )}
                     </div>
-                  )}
 
-                  <div className="border-t border-border dark:border-slate-900/50 pt-2 space-y-1">
-                    {/* Share Watchlist */}
-                    <button
-                      onClick={handleShareWatchlist}
-                      className="w-full flex items-center gap-2.5 p-2 hover:bg-purple-600/10 dark:hover:bg-purple-600/15 text-purple-600 dark:text-purple-400 rounded-xl transition-all text-left text-xs font-bold"
-                    >
-                      <FaShareAlt size={12} />
-                      <span>Share My Showcase</span>
-                    </button>
+                    <div className="border-t border-border dark:border-slate-900/50 pt-2 space-y-1">
+                      {/* Share Watchlist */}
+                      <button
+                        onClick={handleShareWatchlist}
+                        className="w-full flex items-center gap-2.5 p-2 hover:bg-purple-600/10 dark:hover:bg-purple-600/15 text-purple-600 dark:text-purple-400 rounded-xl transition-all text-left text-xs font-bold"
+                      >
+                        <FaShareAlt size={12} />
+                        <span>Share My Showcase</span>
+                      </button>
 
-                    {/* Go back to Profile Select screen */}
-                    <button
-                      onClick={() => {
-                        onLogout();
-                        setShowDropdown(false);
-                      }}
-                      className="w-full flex items-center gap-2.5 p-2 hover:bg-slate-100 dark:hover:bg-slate-900 text-text-secondary hover:text-text-primary rounded-xl transition-colors text-left text-xs font-bold"
-                    >
-                      <FaSignOutAlt size={12} />
-                      <span>Switch Profiles</span>
-                    </button>
+                      {/* Log Out */}
+                      <button
+                        onClick={() => {
+                          onLogout();
+                          setShowDropdown(false);
+                        }}
+                        className="w-full flex items-center gap-2.5 p-2 hover:bg-red-500/10 text-red-500 rounded-xl transition-colors text-left text-xs font-bold"
+                      >
+                        <FaSignOutAlt size={12} />
+                        <span>Sign Out ({authUser.username})</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )
           )}
 
         </div>

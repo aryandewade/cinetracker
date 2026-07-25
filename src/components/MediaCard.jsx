@@ -68,10 +68,10 @@ const MediaCard = ({ item, onDelete, onEdit, onViewDetails }) => {
       {/* Info Section - Below Image */}
       <div className="mt-3 px-1">
         <h3 className="text-[15px] font-bold text-text-primary leading-snug line-clamp-1 group-hover:text-text-primary/80 transition-colors">
-          {item.title}
+          {item.title || item.Title}
         </h3>
         <p className="text-[12px] text-text-secondary mt-1 font-semibold">
-          {item.type ? item.type.toUpperCase() : "MOVIE"} • {item.watchedOn ? new Date(item.watchedOn).getFullYear() : "WATCH LATER"}
+          {item.type ? item.type.toUpperCase() : "MOVIE"} • {item.year || item.Year || (item.watchedOn ? new Date(item.watchedOn).getFullYear() : "N/A")}
         </p>
       </div>
     </div>

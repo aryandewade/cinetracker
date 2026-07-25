@@ -1,0 +1,30 @@
+{
+  "users": [
+    {
+      "id": "usr_1784999388403_jf5xn",
+      "username": "fdscd",
+      "email": "cd@gmail.com",
+      "passwordHash": "c3db8ebfbc65879ff3ac9ad832e1d427:91315f84b600a78788fb15f533c0e747ff339398f19c99b1c4cced0dedea954e99f1ea78c82952f337071d76db26511ac5058342c57a50f1d7543510763bbaf4",
+      "name": "dcs",
+      "avatar": "🍿",
+      "avatarBg": "from-red-500 to-amber-500 text-white",
+      "bio": "Movie & TV enthusiast tracking favorites on Cinetracker.",
+      "createdAt": "2026-07-25T17:09:48.403Z"
+    }
+  ],
+  "media": [
+    {
+      "id": "tmdb-285838",
+      "title": "If Wishes Could Kill",
+      "poster": "https://image.tmdb.org/t/p/w500/2CfTNVaR8kZQkWtWWE3Cntaiq33.jpg",
+      "type": "series",
+      "watchedOn": "2026-05-24",
+      "rating": "Timepass",
+      "review": "",
+      "status": "watched",
+      "userId": "usr_1784999388403_jf5xn",
+      "updatedAt": "2026-07-25T17:09:48.450Z",
+      "createdAt": "2026-07-25T17:09:48.450Z"
+    }
+  ]
+}

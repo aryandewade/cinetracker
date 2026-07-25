@@ -18,6 +18,9 @@ const Dashboard = ({
   onLogout,
   sharedProfile = null,
   onExitSharedView,
+  onOpenAuth,
+  onOpenCommunity,
+  authUser,
 }) => {
   const [selected, setSelected] = useState(null);
   const [editItem, setEditItem] = useState(null);
@@ -85,6 +88,9 @@ const Dashboard = ({
         onLogout={onLogout}
         isSharedView={isSharedView}
         onExitSharedView={onExitSharedView}
+        onOpenAuth={onOpenAuth}
+        onOpenCommunity={onOpenCommunity}
+        authUser={authUser}
       />
 
       <div className="px-6 pt-28 max-w-7xl mx-auto pb-20">
@@ -180,10 +186,12 @@ const Dashboard = ({
         {selected && (
           <AddModal
             item={{
-              id: selected.imdbID,
-              title: selected.Title,
-              poster: selected.Poster,
-              type: selected.Type,
+              id: selected.imdbID || selected.id,
+              title: selected.Title || selected.title,
+              poster: selected.Poster || selected.poster,
+              type: selected.Type || selected.type,
+              year: selected.Year || selected.year,
+              Year: selected.Year || selected.year,
             }}
             onClose={() => setSelected(null)}
             onSave={addItem}

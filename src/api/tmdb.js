@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
+const API_KEY = import.meta.env.VITE_TMDB_API_KEY || "8265bd1679663a7ea12ac168da84d2e8";
 const BASE_URL = "https://api.tmdb.org/3";
 
 const tmdb = axios.create({
@@ -31,13 +31,21 @@ export const searchTMDB = async (query) => {
     const results = res.data.results || [];
     return results
       .filter((item) => item.media_type === "movie" || item.media_type === "tv")
-      .map((item) => ({
-        imdbID: `tmdb-${item.id}`,
-        Title: item.title || item.name,
-        Year: (item.release_date || item.first_air_date || "").split("-")[0] || "N/A",
-        Type: item.media_type === "tv" ? "series" : "movie",
-        Poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : "N/A",
-      }));
+      .map((item) => {
+        const releaseYear = (item.release_date || item.first_air_date || "").split("-")[0] || "N/A";
+        return {
+          id: `tmdb-${item.id}`,
+          imdbID: `tmdb-${item.id}`,
+          title: item.title || item.name,
+          Title: item.title || item.name,
+          year: releaseYear,
+          Year: releaseYear,
+          type: item.media_type === "tv" ? "series" : "movie",
+          Type: item.media_type === "tv" ? "series" : "movie",
+          poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : "N/A",
+          Poster: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : "N/A",
+        };
+      });
   } catch (err) {
     console.error("[TMDB Search Error Details]", err.response ? { status: err.response.status, data: err.response.data } : err.message);
     throw err;
