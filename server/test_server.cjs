@@ -1,6 +1,9 @@
-const http = require("http");
-const db = require("./db");
-const { generateToken, verifyToken, hashPassword, verifyPassword } = require("./jwt");
+// Backend smoke test for the .cjs server modules.
+// Run with: node server/test_server.js
+process.env.JWT_SECRET = process.env.JWT_SECRET || "test-only-secret-do-not-use-in-production";
+
+const db = require("./db.cjs");
+const { generateToken, verifyToken, hashPassword, verifyPassword } = require("./jwt.cjs");
 
 console.log("--- Testing Cinetracker DB & Auth Layer ---");
 

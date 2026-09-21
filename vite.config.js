@@ -5,7 +5,14 @@ import https from 'https';
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const TMDB_KEY = env.TMDB_API_KEY || "8265bd1679663a7ea12ac168da84d2e8";
+  // No fallback: fail fast instead of silently shipping a committed key.
+  const TMDB_KEY = env.TMDB_API_KEY;
+  if (!TMDB_KEY) {
+    throw new Error(
+      'TMDB_API_KEY is not set. Add it to your .env file (see .env.example). ' +
+        'Never hardcode the key in source or commit it.'
+    );
+  }
 
   return {
     plugins: [

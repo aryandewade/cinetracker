@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import Dashboard from "./pages/Dashboard";
-import ProfileSelector from "./components/ProfileSelector";
 import AuthModal from "./components/AuthModal";
 import CommunityModal from "./components/CommunityModal";
-import { getCurrentUser, logoutUser, updateProfile } from "./api/auth";
-import { fetchUserMedia, saveMediaItem, deleteMediaItem, syncLocalMedia } from "./api/media";
-import { getToken, setToken } from "./api/client";
+import { getCurrentUser, logoutUser } from "./api/auth";
+import { saveMediaItem, deleteMediaItem, syncLocalMedia, fetchUserProfile } from "./api/media";
+import { getToken } from "./api/client";
 
 export default function App() {
   const [authUser, setAuthUser] = useState(null);
@@ -24,32 +23,56 @@ export default function App() {
 
   const initApp = async () => {
     try {
-      // 1. Check for URL share parameter
       const params = new URLSearchParams(window.location.search);
+
+      // 1. Check for Direct Username share URL (?u=username or ?user=username)
+      const usernameParam = params.get("u") || params.get("user");
+      if (usernameParam) {
+        try {
+          const res = await fetchUserProfile(usernameParam);
+          if (res && res.user) {
+            setSharedProfile({
+              ...res.user,
+              data: res.data || []
+            });
+            setIsLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.error("Failed to load user profile from URL parameter:", e);
+        }
+      }
+
+      // 2. Check for self-contained Base64 share parameter (?share=...)
       const shareData = params.get("share");
       if (shareData) {
         try {
           const decoded = JSON.parse(decodeURIComponent(atob(shareData)));
-          setSharedProfile(decoded);
-          setIsLoading(false);
-          return;
+          if (decoded && (decoded.name || decoded.username)) {
+            setSharedProfile(decoded);
+            setIsLoading(false);
+            return;
+          }
         } catch (e) {
           console.error("Failed to decode share parameter:", e);
         }
       }
 
-      // 3. Check for active Supabase token
+      // 3. Check for active authenticated user session
       const token = getToken();
       if (token) {
         try {
           const res = await getCurrentUser();
           if (res && res.user) {
             setAuthUser(res.user);
-            const userMedia = res.data || [];
+            const remoteMedia = res.data || [];
             
-            // Check for legacy local data to sync
-            const localProfiles = JSON.parse(localStorage.getItem("cineTrack_profiles")) || [];
-            const legacyData = JSON.parse(localStorage.getItem("cineTrack")) || [];
+            // Check for cached user data in local storage
+            const cachedMedia = JSON.parse(localStorage.getItem(`cineTrack_cache_${res.user.id}`) || "null");
+
+            // Check for legacy or guest local data to sync
+            const localProfiles = JSON.parse(localStorage.getItem("cineTrack_profiles") || "[]");
+            const legacyData = JSON.parse(localStorage.getItem("cineTrack") || "[]");
             let itemsToSync = [];
 
             if (localProfiles.length > 0) {
@@ -60,12 +83,19 @@ export default function App() {
               itemsToSync = legacyData;
             }
 
-            let finalMedia = userMedia;
+            // Deduplicate itemsToSync against remote items
+            itemsToSync = itemsToSync.filter(item => !remoteMedia.some(rm => rm.id === item.id));
+
+            let finalMedia = remoteMedia.length > 0 ? remoteMedia : (cachedMedia || []);
+
             if (itemsToSync.length > 0) {
               try {
                 const syncRes = await syncLocalMedia(itemsToSync);
-                if (syncRes && syncRes.data) {
-                  finalMedia = syncRes.data;
+                if (syncRes && syncRes.data && syncRes.data.length > 0) {
+                  // Merge without duplicating
+                  const existingIds = new Set(finalMedia.map(m => m.id));
+                  const newItems = syncRes.data.filter(m => !existingIds.has(m.id));
+                  finalMedia = [...finalMedia, ...newItems];
                   localStorage.removeItem("cineTrack_profiles");
                   localStorage.removeItem("cineTrack");
                 }
@@ -74,8 +104,12 @@ export default function App() {
               }
             }
 
+            // Save refreshed media to local cache
+            localStorage.setItem(`cineTrack_cache_${res.user.id}`, JSON.stringify(finalMedia));
+
             const profileObj = {
               id: res.user.id,
+              username: res.user.username,
               name: res.user.name || res.user.username,
               avatar: res.user.avatar || "🍿",
               avatarBg: res.user.avatarBg || "from-red-500 to-amber-500 text-white",
@@ -94,7 +128,7 @@ export default function App() {
         }
       }
 
-      // 3. Fallback to Guest/Local storage mode
+      // 4. Fallback to Guest/Local storage mode
       loadGuestProfiles();
     } catch (err) {
       console.error("Critical init error:", err);
@@ -105,31 +139,21 @@ export default function App() {
   };
 
   const loadGuestProfiles = () => {
-    let savedProfiles = JSON.parse(localStorage.getItem("cineTrack_profiles"));
-    const legacyData = JSON.parse(localStorage.getItem("cineTrack"));
+    let savedProfiles = JSON.parse(localStorage.getItem("cineTrack_profiles") || "null");
+    const legacyData = JSON.parse(localStorage.getItem("cineTrack") || "null");
 
     if (!savedProfiles || savedProfiles.length === 0) {
-      if (legacyData && legacyData.length > 0) {
-        const guestProfile = {
-          id: "profile-guest",
-          name: "Guest User",
-          avatar: "🍿",
-          bio: "Local watchlist & reviews collection.",
-          data: legacyData,
-        };
-        savedProfiles = [guestProfile];
-        localStorage.setItem("cineTrack_profiles", JSON.stringify(savedProfiles));
-      } else {
-        const guestProfile = {
-          id: "profile-guest",
-          name: "Guest User",
-          avatar: "🍿",
-          bio: "Local watchlist & reviews collection.",
-          data: [],
-        };
-        savedProfiles = [guestProfile];
-        localStorage.setItem("cineTrack_profiles", JSON.stringify(savedProfiles));
-      }
+      const initialData = legacyData && legacyData.length > 0 ? legacyData : [];
+      const guestProfile = {
+        id: "profile-guest",
+        name: "Guest User",
+        avatar: "🍿",
+        avatarBg: "from-red-500 to-amber-500 text-white",
+        bio: "Local watchlist & reviews collection.",
+        data: initialData,
+      };
+      savedProfiles = [guestProfile];
+      localStorage.setItem("cineTrack_profiles", JSON.stringify(savedProfiles));
     }
 
     setProfiles(savedProfiles);
@@ -145,21 +169,42 @@ export default function App() {
     setIsLoading(true);
     try {
       const res = await getCurrentUser();
-      const userMedia = (res && res.data) ? res.data : [];
+      let userMedia = (res && res.data && res.data.length > 0) ? res.data : [];
 
-      if (activeProfile && activeProfile.data && activeProfile.data.length > 0) {
-        try {
-          const syncRes = await syncLocalMedia(activeProfile.data);
-          if (syncRes && syncRes.data) {
-            userMedia.push(...syncRes.data);
-          }
-        } catch (e) {
-          console.error("Error syncing media after auth:", e);
+      // Check local cache if remote was empty
+      if (userMedia.length === 0) {
+        const cached = JSON.parse(localStorage.getItem(`cineTrack_cache_${user.id}`) || "null");
+        if (cached && cached.length > 0) {
+          userMedia = cached;
         }
       }
 
+      // If active guest had local items, sync them to the database
+      if (activeProfile && activeProfile.data && activeProfile.data.length > 0) {
+        const existingIds = new Set(userMedia.map(m => m.id));
+        const unmergedItems = activeProfile.data.filter(m => !existingIds.has(m.id));
+
+        if (unmergedItems.length > 0) {
+          try {
+            const syncRes = await syncLocalMedia(unmergedItems);
+            if (syncRes && syncRes.data) {
+              const newlySynced = syncRes.data.filter(m => !existingIds.has(m.id));
+              userMedia = [...userMedia, ...newlySynced];
+            }
+          } catch (e) {
+            console.error("Error syncing media after auth:", e);
+            // Even if sync failed over network, retain in local state
+            userMedia = [...userMedia, ...unmergedItems];
+          }
+        }
+      }
+
+      // Persist to user cache
+      localStorage.setItem(`cineTrack_cache_${user.id}`, JSON.stringify(userMedia));
+
       const profileObj = {
         id: user.id,
+        username: user.username,
         name: user.name || user.username,
         avatar: user.avatar || "🍿",
         avatarBg: user.avatarBg || "from-red-500 to-amber-500 text-white",
@@ -185,6 +230,9 @@ export default function App() {
     setActiveProfile(updatedProfile);
 
     if (authUser) {
+      // Optimistically update per-user cache
+      localStorage.setItem(`cineTrack_cache_${authUser.id}`, JSON.stringify(updatedData));
+
       const oldData = activeProfile.data || [];
       
       for (const item of updatedData) {
@@ -225,7 +273,9 @@ export default function App() {
   const handleExitSharedView = () => {
     const url = new URL(window.location);
     url.searchParams.delete("share");
-    window.history.pushState({}, "", url);
+    url.searchParams.delete("u");
+    url.searchParams.delete("user");
+    window.history.pushState({}, "", url.pathname);
     setSharedProfile(null);
   };
 
