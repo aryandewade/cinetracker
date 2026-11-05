@@ -7,7 +7,11 @@ export default function handler(req, res) {
     return res.status(400).json({ error: 'ID parameter is required' });
   }
 
-  const TMDB_KEY = process.env.TMDB_API_KEY || "8265bd1679663a7ea12ac168da84d2e8";
+  const TMDB_KEY = process.env.TMDB_API_KEY;
+  // Fail closed if the key is missing — never fall back to a committed key.
+  if (!TMDB_KEY) {
+    return res.status(500).json({ error: 'TMDB_API_KEY is not configured on the server.' });
+  }
   const appendToResponse = mediaType === 'tv' ? 'credits,content_ratings' : 'credits,release_dates';
   const tmdbUrl = `https://api.tmdb.org/3/${mediaType}/${id}?api_key=${TMDB_KEY}&append_to_response=${appendToResponse}`;
 

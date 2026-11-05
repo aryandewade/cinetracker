@@ -1,22 +1,9 @@
 import { useState, useEffect } from "react";
 import { FaTimes, FaEdit, FaTrash, FaShareAlt, FaCalendarAlt, FaAward, FaStar } from "react-icons/fa";
 import { fetchTMDBDetails } from "../api/tmdb";
+import { getRatingBadgeStyle, getOriginalPoster } from "../utils/mediaFormat";
+import useModalA11y, { backdropClick } from "../hooks/useModalA11y";
 import Loader from "./Loader";
-
-const getRatingColor = (rating) => {
-  switch (rating) {
-    case "Skip": return "bg-rating-skip/20 text-rating-skip border-rating-skip/40";
-    case "Timepass": return "bg-rating-timepass/20 text-rating-timepass border-rating-timepass/40";
-    case "Go for it": return "bg-rating-go/20 text-rating-go border-rating-go/40";
-    case "Perfection": return "bg-rating-perfection/20 text-rating-perfection border-rating-perfection/40";
-    default: return "bg-slate-500/20 text-slate-400 border-slate-500/40";
-  }
-};
-
-const getHighResPoster = (url) => {
-  if (!url || url === "N/A") return null;
-  return url.replace(/_SX\d+\.jpg$/, ".jpg");
-};
 
 export default function DetailsModal({
   item,
@@ -31,6 +18,7 @@ export default function DetailsModal({
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const containerRef = useModalA11y({ isOpen: true, onClose });
 
   useEffect(() => {
     const getDetails = async () => {
@@ -61,12 +49,20 @@ export default function DetailsModal({
   const reviewerAvatarBg = isSharedView ? (sharedProfile?.avatarBg || "from-slate-700 to-slate-900") : (activeProfile?.avatarBg || "from-red-500 to-amber-500");
 
   return (
-    <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4 md:p-6 overflow-y-auto animate-fade-in">
+    <div
+      ref={containerRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-label={item?.title ? `${item.title} details` : "Media details"}
+      onClick={backdropClick(onClose)}
+      className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-50 p-4 md:p-6 overflow-y-auto animate-fade-in outline-none"
+    >
       {/* Cinematic Blur Ambient Glow Background */}
       {item.poster && item.poster !== "N/A" && (
         <div
           className="absolute inset-0 bg-cover bg-center opacity-10 blur-3xl pointer-events-none transition-opacity duration-1000"
-          style={{ backgroundImage: `url(${getHighResPoster(item.poster)})` }}
+          style={{ backgroundImage: `url(${getOriginalPoster(item.poster)})` }}
         />
       )}
 
@@ -103,7 +99,7 @@ export default function DetailsModal({
                 <div className="w-48 md:w-full aspect-[2/3] rounded-2xl overflow-hidden bg-slate-800 shadow-2xl border border-white/5 relative group">
                   {details.Poster && details.Poster !== "N/A" ? (
                     <img
-                      src={getHighResPoster(details.Poster)}
+                      src={getOriginalPoster(details.Poster)}
                       alt={details.Title}
                       className="w-full h-full object-cover"
                     />
@@ -115,7 +111,7 @@ export default function DetailsModal({
 
                   {/* Rating Tag */}
                   {item.rating && (
-                    <div className={`absolute top-3 left-3 px-3 py-1 text-[11px] font-bold uppercase tracking-wider rounded-md border backdrop-blur-md shadow-lg ${getRatingColor(item.rating)}`}>
+                    <div className={`absolute top-3 left-3 px-3 py-1 text-[11px] font-bold uppercase tracking-wider rounded-md border backdrop-blur-md shadow-lg ${getRatingBadgeStyle(item.rating)}`}>
                       {item.rating}
                     </div>
                   )}
@@ -231,11 +227,35 @@ export default function DetailsModal({
                       </div>
 
                       {item.rating && (
-                        <div className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${getRatingColor(item.rating)}`}>
+                        <div className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${getRatingBadgeStyle(item.rating)}`}>
                           {item.rating}
                         </div>
                       )}
                     </div>
+
+                    {/* Episode progress for series */}
+                    {item.type === "series" && (item.episodesWatched > 0 || item.totalEpisodes > 0) && (
+                      <div className="mt-4 bg-slate-50 dark:bg-slate-900/60 border border-border dark:border-slate-900 p-4 rounded-2xl">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-bold uppercase text-text-secondary tracking-wider">📺 Episode Progress</span>
+                          <span className="text-xs font-extrabold text-text-primary tabular-nums">
+                            {item.episodesWatched || 0} / {item.totalEpisodes || "?"}
+                          </span>
+                        </div>
+                        {item.totalEpisodes > 0 && (
+                          <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-500"
+                              style={{ width: `${Math.min(100, ((item.episodesWatched || 0) / item.totalEpisodes) * 100)}%` }}
+                              role="progressbar"
+                              aria-valuenow={item.episodesWatched || 0}
+                              aria-valuemin={0}
+                              aria-valuemax={item.totalEpisodes}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {item.review ? (
                       <p className="text-sm italic text-text-primary/95 leading-relaxed bg-white/40 dark:bg-black/20 p-3.5 rounded-xl border border-white/5 font-normal whitespace-pre-line">

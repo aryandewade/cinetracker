@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Navbar from "../components/Navbar";
 import SearchBar from "../components/SearchBar";
 import AddModal from "../components/AddModal";
+import MediaCard from "../components/MediaCard";
 import YearGroup from "../components/YearGroup";
 import ConfirmModal from "../components/ConfirmModal";
 import EmptyState from "../components/EmptyState";
@@ -65,15 +66,14 @@ const Dashboard = ({
 
   // Filter data based on tab (Watch Later or Watched History)
   const filteredData = dataset.filter(item => {
-    if (isSharedView) return item.status !== 'watch-later'; // shared users only show reviewed items
     if (activeTab === 'watch-later') return item.status === 'watch-later';
     return item.status !== 'watch-later';
   });
 
   const grouped = groupByYearAndMonth(filteredData);
 
-  // Sorting: in regular mode, items are grouped by Date Watched.
-  // In Watch Later mode, we display a standard grid. Let's make sure it's fully integrated.
+  const watchedCount = dataset.filter(i => i.status !== 'watch-later').length;
+  const watchLaterCount = dataset.filter(i => i.status === 'watch-later').length;
 
   return (
     <div className="min-h-screen bg-background transition-colors duration-300">
@@ -97,37 +97,60 @@ const Dashboard = ({
         
         {/* Shared View Profile Hero Header */}
         {isSharedView && (
-          <div className="mb-12 mt-6 p-6 rounded-3xl bg-slate-100/40 dark:bg-slate-900/40 border border-slate-200/50 dark:border-slate-800/40 backdrop-blur-md flex flex-col md:flex-row items-center gap-6 animate-fade-in">
+          <div className="mb-10 mt-4 p-6 rounded-3xl bg-slate-100/50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/40 backdrop-blur-md flex flex-col md:flex-row items-center gap-6 animate-fade-in shadow-xl">
             <div className={`w-24 h-24 rounded-3xl bg-gradient-to-tr ${sharedProfile.avatarBg || "from-slate-700 to-slate-900"} flex items-center justify-center text-5xl shadow-xl shrink-0`}>
-              {sharedProfile.avatar}
+              {sharedProfile.avatar || "🍿"}
             </div>
             <div className="flex-1 text-center md:text-left">
               <span className="text-[10px] bg-purple-600/10 text-purple-600 dark:bg-purple-600/20 dark:text-purple-400 font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">CineTrack Shared Showcase</span>
               <h1 className="text-3xl font-extrabold text-text-primary tracking-tight mt-2.5">
-                {sharedProfile.name}'s Cinematic Portfolio
+                {sharedProfile.name || sharedProfile.username || "Member"}'s Showcase
               </h1>
+              {sharedProfile.username && (
+                <p className="text-xs text-purple-500 dark:text-purple-400 font-mono mt-0.5">@{sharedProfile.username}</p>
+              )}
               {sharedProfile.bio && (
                 <p className="text-text-secondary text-sm mt-1.5 italic max-w-2xl">
                   "{sharedProfile.bio}"
                 </p>
               )}
             </div>
-            <div className="bg-slate-200/50 dark:bg-slate-950/60 px-6 py-4 rounded-2xl border border-border dark:border-slate-900 text-center shrink-0 min-w-[120px]">
-              <p className="text-2xl font-extrabold text-text-primary">{dataset.filter(i => i.status !== 'watch-later').length}</p>
-              <p className="text-[10px] text-text-secondary uppercase font-bold tracking-wider mt-0.5">Watched Items</p>
+            <div className="flex gap-3 shrink-0">
+              <button
+                onClick={() => setActiveTab('history')}
+                className={`px-5 py-3 rounded-2xl border text-center transition-all ${
+                  activeTab === 'history'
+                    ? 'bg-purple-600/20 border-purple-500/50 text-purple-400'
+                    : 'bg-slate-200/50 dark:bg-slate-950/60 border-border dark:border-slate-900 text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                <p className="text-2xl font-extrabold">{watchedCount}</p>
+                <p className="text-[10px] uppercase font-bold tracking-wider mt-0.5">Watched</p>
+              </button>
+              <button
+                onClick={() => setActiveTab('watch-later')}
+                className={`px-5 py-3 rounded-2xl border text-center transition-all ${
+                  activeTab === 'watch-later'
+                    ? 'bg-purple-600/20 border-purple-500/50 text-purple-400'
+                    : 'bg-slate-200/50 dark:bg-slate-950/60 border-border dark:border-slate-900 text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                <p className="text-2xl font-extrabold">{watchLaterCount}</p>
+                <p className="text-[10px] uppercase font-bold tracking-wider mt-0.5">Watch Later</p>
+              </button>
             </div>
           </div>
         )}
 
         {/* Regular Stats Section */}
-        {((showStats && activeTab === 'history') || isSharedView) && (
+        {((showStats && activeTab === 'history') || (isSharedView && showStats)) && (
           <div className="mb-12 animate-fade-in">
-            {!isSharedView && (
-              <div className="flex items-center gap-3 mb-6">
-                <span className="text-2xl">🔥</span>
-                <h2 className="text-3xl font-bold text-text-primary tracking-tight">Your Stats</h2>
-              </div>
-            )}
+            <div className="flex items-center gap-3 mb-6">
+              <span className="text-2xl">🔥</span>
+              <h2 className="text-3xl font-bold text-text-primary tracking-tight">
+                {isSharedView ? `${sharedProfile.name || 'Member'}'s Stats` : 'Your Stats'}
+              </h2>
+            </div>
             <StatsPanel data={dataset.filter(i => i.status !== 'watch-later')} />
           </div>
         )}
@@ -144,22 +167,36 @@ const Dashboard = ({
           <EmptyState
             message={
               isSharedView
-                ? `${sharedProfile.name} hasn't rated any movies or series yet.`
+                ? activeTab === 'watch-later'
+                  ? `${sharedProfile.name || 'This user'} has no items in Watch Later.`
+                  : `${sharedProfile.name || 'This user'} hasn't reviewed any movies or series yet.`
                 : activeTab === 'watch-later'
                 ? "No movies in Watch Later yet."
                 : "No movies watched yet."
             }
+            hint={
+              isSharedView
+                ? "Check back later or explore other members in the Community tab."
+                : undefined
+            }
+            emoji={activeTab === 'watch-later' ? "⏳" : "🍿"}
+            actionLabel={!isSharedView && activeTab === 'history' ? "Add your first movie" : undefined}
+            onAction={
+              !isSharedView && activeTab === 'history'
+                ? () => document.getElementById("cine-search-input")?.focus()
+                : undefined
+            }
           />
         ) : (
           <div className="mt-8 animate-fade-in">
-            {activeTab === 'watch-later' && !isSharedView ? (
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
+            {activeTab === 'watch-later' ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
                 {filteredData.map(item => (
                   <div key={item.id} className="relative">
-                    <MediaCardWrapper
+                    <MediaCard
                       item={item}
-                      onDelete={setConfirmItem}
-                      onEdit={setEditItem}
+                      onDelete={isSharedView ? null : setConfirmItem}
+                      onEdit={isSharedView ? null : setEditItem}
                       onViewDetails={setDetailsItem}
                     />
                   </div>
@@ -241,6 +278,9 @@ const Dashboard = ({
         {confirmItem && (
           <ConfirmModal
             title="Delete this entry?"
+            message={`"${confirmItem.title}" will be permanently removed from your ${
+              confirmItem.status === "watch-later" ? "Watch Later list" : "watch history"
+            }. This cannot be undone.`}
             onConfirm={() => deleteItem(confirmItem)}
             onCancel={() => setConfirmItem(null)}
           />
@@ -249,16 +289,5 @@ const Dashboard = ({
     </div>
   );
 };
-
-// Custom Wrapper for MediaCard
-import MediaCard from "../components/MediaCard";
-const MediaCardWrapper = ({ item, onDelete, onEdit, onViewDetails }) => (
-  <MediaCard
-    item={item}
-    onDelete={onDelete}
-    onEdit={onEdit}
-    onViewDetails={onViewDetails}
-  />
-);
 
 export default Dashboard;

@@ -1,21 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { FaTimes, FaDownload, FaShareAlt } from "react-icons/fa";
+import { getRatingColorHex, getHighResPoster } from "../utils/mediaFormat";
+import useModalA11y, { backdropClick } from "../hooks/useModalA11y";
 import Loader from "./Loader";
-
-const getRatingColorHex = (rating) => {
-  switch (rating) {
-    case "Skip": return "#f472b6"; // Pink-400
-    case "Timepass": return "#fbbf24"; // Amber-400
-    case "Go for it": return "#34d399"; // Emerald-400
-    case "Perfection": return "#c084fc"; // Purple-400
-    default: return "#94a3b8"; // Slate-400
-  }
-};
-
-const getHighResPoster = (url) => {
-  if (!url || url === "N/A") return null;
-  return url.replace(/_SX\d+\.jpg$/, ".jpg");
-};
 
 export default function ShareCardModal({
   item,
@@ -25,11 +12,79 @@ export default function ShareCardModal({
   const canvasRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [previewUrl, setPreviewUrl] = useState("");
+  const containerRef = useModalA11y({ isOpen: true, onClose });
 
   const profileName = activeProfile?.name || "CineTracker";
   const profileAvatar = activeProfile?.avatar || "🍿";
 
   useEffect(() => {
+    // Canvas drawing helpers declared inside the effect so the hook
+    // dependencies stay accurate and there are no declaration-order issues.
+    const drawRoundedRect = (ctx, x, y, width, height, radius) => {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+    };
+
+    const wrapText = (context, text, x, y, maxWidth, lineHeight, maxLines = 10) => {
+      const words = text.split(" ");
+      let line = "";
+      let currentY = y;
+      let lineCount = 0;
+
+      for (let n = 0; n < words.length; n++) {
+        let testLine = line + words[n] + " ";
+        let metrics = context.measureText(testLine);
+        let testWidth = metrics.width;
+
+        if (testWidth > maxWidth && n > 0) {
+          lineCount++;
+          if (lineCount >= maxLines) {
+            context.fillText(line.trim() + "...", x, currentY);
+            return currentY;
+          }
+          context.fillText(line.trim(), x, currentY);
+          line = words[n] + " ";
+          currentY += lineHeight;
+        } else {
+          line = testLine;
+        }
+      }
+      context.fillText(line.trim(), x, currentY);
+      return currentY;
+    };
+
+    const drawFallbackPoster = (ctx) => {
+      const posterWidth = 340;
+      const posterHeight = 510;
+      const posterX = 60;
+      const posterY = 82;
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+      ctx.lineWidth = 2;
+      drawRoundedRect(ctx, posterX, posterY, posterWidth, posterHeight, 20);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+      ctx.font = "bold 90px 'Inter', system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("🎬", posterX + posterWidth / 2, posterY + posterHeight / 2 - 20);
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+      ctx.font = "bold 20px 'Inter', system-ui, sans-serif";
+      ctx.fillText("NO POSTER", posterX + posterWidth / 2, posterY + posterHeight / 2 + 50);
+    };
+
     const generateCard = async () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -122,7 +177,6 @@ export default function ShareCardModal({
         ctx.font = "italic 26px 'Inter', system-ui, sans-serif";
         
         const reviewText = item.review ? `"${item.review}"` : '"No review text recorded yet."';
-        const reviewMaxY = canvas.height - 150;
         const maxReviewLines = 4;
         
         // Wrap and draw review body
@@ -211,71 +265,6 @@ export default function ShareCardModal({
     generateCard();
   }, [item, profileName, profileAvatar]);
 
-  const drawFallbackPoster = (ctx) => {
-    const posterWidth = 340;
-    const posterHeight = 510;
-    const posterX = 60;
-    const posterY = 82;
-
-    ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
-    ctx.lineWidth = 2;
-    drawRoundedRect(ctx, posterX, posterY, posterWidth, posterHeight, 20);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
-    ctx.font = "bold 90px 'Inter', system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("🎬", posterX + posterWidth / 2, posterY + posterHeight / 2 - 20);
-
-    ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
-    ctx.font = "bold 20px 'Inter', system-ui, sans-serif";
-    ctx.fillText("NO POSTER", posterX + posterWidth / 2, posterY + posterHeight / 2 + 50);
-  };
-
-  const drawRoundedRect = (ctx, x, y, width, height, radius) => {
-    ctx.beginPath();
-    ctx.moveTo(x + radius, y);
-    ctx.lineTo(x + width - radius, y);
-    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-    ctx.lineTo(x + width, y + height - radius);
-    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-    ctx.lineTo(x + radius, y + height);
-    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-    ctx.lineTo(x, y + radius);
-    ctx.quadraticCurveTo(x, y, x + radius, y);
-    ctx.closePath();
-  };
-
-  const wrapText = (context, text, x, y, maxWidth, lineHeight, maxLines = 10) => {
-    const words = text.split(" ");
-    let line = "";
-    let currentY = y;
-    let lineCount = 0;
-
-    for (let n = 0; n < words.length; n++) {
-      let testLine = line + words[n] + " ";
-      let metrics = context.measureText(testLine);
-      let testWidth = metrics.width;
-
-      if (testWidth > maxWidth && n > 0) {
-        lineCount++;
-        if (lineCount >= maxLines) {
-          context.fillText(line.trim() + "...", x, currentY);
-          return currentY;
-        }
-        context.fillText(line.trim(), x, currentY);
-        line = words[n] + " ";
-        currentY += lineHeight;
-      } else {
-        line = testLine;
-      }
-    }
-    context.fillText(line.trim(), x, currentY);
-    return currentY;
-  };
-
   const handleDownload = () => {
     if (!previewUrl) return;
     const link = document.createElement("a");
@@ -286,18 +275,27 @@ export default function ShareCardModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-[60] p-4 animate-fade-in text-white select-none">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-3xl shadow-2xl p-6 md:p-8 flex flex-col items-center">
+    <div
+      ref={containerRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Share your review"
+      onClick={backdropClick(onClose)}
+      className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-[60] p-4 animate-fade-in text-white select-none outline-none"
+    >
+      <div className="bg-surface dark:bg-slate-900 border border-border dark:border-slate-800 rounded-3xl w-full max-w-3xl shadow-2xl p-6 md:p-8 flex flex-col items-center">
         
         {/* Header */}
         <div className="w-full flex justify-between items-center mb-6">
           <div>
-            <h3 className="text-xl font-bold tracking-tight">Share Your Review</h3>
-            <p className="text-slate-400 text-xs mt-1">Download this beautiful graphic card to share with friends!</p>
+            <h3 className="text-xl font-bold tracking-tight text-text-primary">Share Your Review</h3>
+            <p className="text-text-secondary text-xs mt-1">Download this beautiful graphic card to share with friends!</p>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-2 rounded-full hover:bg-slate-800 transition-colors"
+            aria-label="Close share card"
+            className="text-text-secondary hover:text-text-primary p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <FaTimes />
           </button>
@@ -312,11 +310,11 @@ export default function ShareCardModal({
         />
 
         {/* Card Preview Area */}
-        <div className="w-full flex justify-center items-center relative aspect-[16/9] max-h-[380px] bg-slate-950/60 rounded-2xl overflow-hidden border border-slate-800 shadow-inner">
+        <div className="w-full flex justify-center items-center relative aspect-[16/9] max-h-[380px] bg-surface dark:bg-slate-950/60 rounded-2xl overflow-hidden border border-border dark:border-slate-800 shadow-inner">
           {loading ? (
             <div className="flex flex-col items-center">
               <Loader />
-              <p className="text-xs text-slate-500 mt-3 animate-pulse">Rendering review canvas...</p>
+              <p className="text-xs text-text-secondary mt-3 animate-pulse">Rendering review canvas...</p>
             </div>
           ) : (
             <img
@@ -328,10 +326,10 @@ export default function ShareCardModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="w-full flex gap-3 mt-6 border-t border-slate-800/60 pt-6">
+        <div className="w-full flex gap-3 mt-6 border-t border-border dark:border-slate-800/60 pt-6">
           <button
             onClick={onClose}
-            className="flex-1 py-3 text-sm font-semibold text-slate-400 hover:text-white rounded-xl hover:bg-slate-800/40 transition-all border border-transparent hover:border-slate-800"
+            className="flex-1 py-3 text-sm font-semibold text-text-secondary hover:text-text-primary rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-all border border-transparent hover:border-slate-200 dark:hover:border-slate-800"
           >
             Cancel
           </button>

@@ -1,11 +1,24 @@
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://rtgkxjwdfzabehlmnmdl.supabase.co";
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_HJ92Q6o8ycqkSbsFKSFRLQ_pw7_VWFO";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// Fail fast — no hardcoded fallbacks in source control.
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  throw new Error(
+    "Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. " +
+      "Configure them in your .env file (see .env.example)."
+  );
+}
 
 const TOKEN_KEY = "cineTrack_supabase_token";
+const REFRESH_TOKEN_KEY = "cineTrack_supabase_refresh";
 const USER_KEY = "cineTrack_supabase_user";
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
+}
+
+export function getRefreshToken() {
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
 }
 
 export function setToken(token) {
@@ -16,11 +29,19 @@ export function setToken(token) {
   }
 }
 
+export function setRefreshToken(token) {
+  if (token) {
+    localStorage.setItem(REFRESH_TOKEN_KEY, token);
+  } else {
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+  }
+}
+
 export function getStoredUser() {
   const raw = localStorage.getItem(USER_KEY);
   try {
     return raw ? JSON.parse(raw) : null;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -35,11 +56,50 @@ export function setStoredUser(user) {
 
 export function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
 }
 
+// Supabase Mapping Helper
+function mapMediaItemFromDB(item) {
+  if (!item) return item;
+  return {
+    ...item,
+    watchedOn: item.watched_on !== undefined ? item.watched_on : item.watchedOn,
+    episodesWatched: item.episodes_watched !== undefined ? item.episodes_watched : item.episodesWatched,
+    totalEpisodes: item.total_episodes !== undefined ? item.total_episodes : item.totalEpisodes
+  };
+}
+
+// Session Refresh Helper
+async function refreshSession() {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": SUPABASE_ANON_KEY
+      },
+      body: JSON.stringify({ refresh_token: refreshToken })
+    });
+    
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error_description || "Refresh failed");
+    
+    setToken(data.access_token);
+    setRefreshToken(data.refresh_token);
+    return data.access_token;
+  } catch {
+    clearSession();
+    return null;
+  }
+}
+
 // Supabase REST Helper
-async function supabaseFetch(endpoint, options = {}) {
+async function supabaseFetch(endpoint, options = {}, isRetry = false) {
   const token = getToken();
   const headers = {
     "Content-Type": "application/json",
@@ -57,6 +117,13 @@ async function supabaseFetch(endpoint, options = {}) {
     ...options,
     headers,
   });
+
+  if (response.status === 401 && !isRetry) {
+    const newToken = await refreshSession();
+    if (newToken) {
+      return supabaseFetch(endpoint, options, true);
+    }
+  }
 
   if (response.status === 204) return null;
 
@@ -100,8 +167,10 @@ export async function registerUser({ username, email, password, name, avatar, av
   }
 
   const sessionToken = authRes.access_token || authRes.session?.access_token;
+  const refreshToken = authRes.refresh_token || authRes.session?.refresh_token;
   if (sessionToken) {
     setToken(sessionToken);
+    setRefreshToken(refreshToken);
   }
 
   const profileData = {
@@ -149,18 +218,25 @@ export function loginWithGoogle() {
 export async function loginUser(emailOrUsername, password) {
   let email = emailOrUsername;
 
-  // If user entered a username instead of an email, try resolving email from profiles table
+  // If the user entered a username instead of an email, resolve it through a
+  // security-definer RPC. Emails are NOT directly readable from the profiles
+  // table anymore (see "Privacy Hardening" in supabase_schema.sql).
   if (!emailOrUsername.includes("@")) {
     try {
-      const foundProfiles = await supabaseFetch(
-        `/rest/v1/profiles?username=eq.${encodeURIComponent(emailOrUsername)}&select=email`,
-        { method: "GET" }
-      );
-      if (foundProfiles && foundProfiles.length > 0 && foundProfiles[0].email) {
-        email = foundProfiles[0].email;
+      const resolvedEmail = await supabaseFetch("/rest/v1/rpc/get_login_email", {
+        method: "POST",
+        body: JSON.stringify({ p_username: emailOrUsername })
+      });
+      if (typeof resolvedEmail === "string" && resolvedEmail.includes("@")) {
+        email = resolvedEmail;
+      } else {
+        throw new Error("No account found with that username. Please sign in with your email address.");
       }
-    } catch (e) {
-      // Ignore fallback
+    } catch (err) {
+      if (err && typeof err.message === "string" && err.message.startsWith("No account found")) {
+        throw err;
+      }
+      throw new Error("Username sign-in is unavailable — please sign in with your email address.");
     }
   }
 
@@ -174,6 +250,7 @@ export async function loginUser(emailOrUsername, password) {
 
   const authUser = authRes?.user;
   const sessionToken = authRes?.access_token;
+  const refreshToken = authRes?.refresh_token;
 
   if (!authRes || !authUser || !authUser.id) {
     const errorMsg = authRes?.error_description || authRes?.msg || "Invalid email/username or password.";
@@ -181,6 +258,7 @@ export async function loginUser(emailOrUsername, password) {
   }
 
   setToken(sessionToken);
+  setRefreshToken(refreshToken);
 
   // Fetch complete profile from profiles table
   let profile = null;
@@ -224,7 +302,9 @@ export async function getCurrentUser() {
       if (profs && profs.length > 0) {
         profile = profs[0];
       }
-    } catch (e) {}
+    } catch {
+      // Profile row fetch is optional; fall back to auth metadata below.
+    }
 
     const userObj = {
       id: authUser.id,
@@ -240,11 +320,18 @@ export async function getCurrentUser() {
     let userMedia = [];
     try {
       userMedia = await supabaseFetch(`/rest/v1/media_items?user_id=eq.${authUser.id}`, { method: "GET" });
-    } catch (e) {}
+      if (userMedia && Array.isArray(userMedia)) {
+        userMedia = userMedia.map(mapMediaItemFromDB);
+      } else if (!Array.isArray(userMedia)) {
+        userMedia = [];
+      }
+    } catch {
+      // Media fetch is optional; start with an empty collection.
+    }
 
     setStoredUser(userObj);
     return { user: userObj, data: userMedia || [] };
-  } catch (e) {
+  } catch {
     clearSession();
     return null;
   }
@@ -294,8 +381,13 @@ export async function fetchUserMedia() {
   const user = getStoredUser();
   if (!user) return { data: [] };
 
-  const data = await supabaseFetch(`/rest/v1/media_items?user_id=eq.${user.id}`, { method: "GET" });
-  return { data: data || [] };
+  try {
+    const data = await supabaseFetch(`/rest/v1/media_items?user_id=eq.${user.id}&order=created_at.desc`, { method: "GET" });
+    return { data: data && Array.isArray(data) ? data.map(mapMediaItemFromDB) : [] };
+  } catch (e) {
+    console.warn("fetchUserMedia error:", e);
+    return { data: [] };
+  }
 }
 
 export async function saveMediaItem(item) {
@@ -306,16 +398,17 @@ export async function saveMediaItem(item) {
     id: item.id || ("m_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7)),
     user_id: user.id,
     title: item.title,
-    poster: item.poster,
-    type: item.type,
-    status: item.status,
-    rating: item.rating || 0,
+    poster: item.poster || null,
+    type: item.type || "movie",
+    status: item.status || "watched",
+    rating: item.rating ? String(item.rating) : null,
     review: item.review || "",
     watched_on: item.watchedOn || item.watched_on || null,
     seasons: item.seasons || null,
-    episodes_watched: item.episodesWatched || 0,
-    total_episodes: item.totalEpisodes || 0,
-    notes: item.notes || ""
+    episodes_watched: Number(item.episodesWatched || item.episodes_watched) || 0,
+    total_episodes: Number(item.totalEpisodes || item.total_episodes) || 0,
+    notes: item.notes || "",
+    is_public: true
   };
 
   const res = await supabaseFetch("/rest/v1/media_items", {
@@ -326,7 +419,7 @@ export async function saveMediaItem(item) {
     body: JSON.stringify(mediaRow)
   });
 
-  return { item: res ? res[0] : mediaRow };
+  return { item: res && Array.isArray(res) && res.length > 0 ? mapMediaItemFromDB(res[0]) : mapMediaItemFromDB(mediaRow) };
 }
 
 export async function deleteMediaItem(itemId) {
@@ -348,16 +441,17 @@ export async function syncLocalMedia(items) {
     id: item.id || ("m_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7)),
     user_id: user.id,
     title: item.title,
-    poster: item.poster,
-    type: item.type,
-    status: item.status,
-    rating: item.rating || 0,
+    poster: item.poster || null,
+    type: item.type || "movie",
+    status: item.status || "watched",
+    rating: item.rating ? String(item.rating) : null,
     review: item.review || "",
     watched_on: item.watchedOn || item.watched_on || null,
     seasons: item.seasons || null,
-    episodes_watched: item.episodesWatched || 0,
-    total_episodes: item.totalEpisodes || 0,
-    notes: item.notes || ""
+    episodes_watched: Number(item.episodesWatched || item.episodes_watched) || 0,
+    total_episodes: Number(item.totalEpisodes || item.total_episodes) || 0,
+    notes: item.notes || "",
+    is_public: true
   }));
 
   const res = await supabaseFetch("/rest/v1/media_items", {
@@ -368,7 +462,7 @@ export async function syncLocalMedia(items) {
     body: JSON.stringify(rows)
   });
 
-  return { data: res || rows };
+  return { data: res && Array.isArray(res) ? res.map(mapMediaItemFromDB) : (Array.isArray(rows) ? rows.map(mapMediaItemFromDB) : []) };
 }
 
 // -----------------------------------------------------------
@@ -385,10 +479,10 @@ export async function fetchAllUsers() {
       return {
         id: p.id,
         username: p.username,
-        name: p.name,
-        avatar: p.avatar,
-        avatarBg: p.avatar_bg,
-        bio: p.bio,
+        name: p.name || p.username,
+        avatar: p.avatar || "🍿",
+        avatarBg: p.avatar_bg || "from-red-500 to-amber-500 text-white",
+        bio: p.bio || "",
         stats: {
           total: userMedia.length,
           watched: userMedia.filter(m => m.status !== "watch-later").length,
@@ -405,26 +499,52 @@ export async function fetchAllUsers() {
 }
 
 export async function fetchUserProfile(usernameOrId) {
-  let targetUser = null;
-  const profs = await supabaseFetch(
-    `/rest/v1/profiles?or=(username.eq.${encodeURIComponent(usernameOrId)},id.eq.${encodeURIComponent(usernameOrId)})`,
-    { method: "GET" }
-  );
+  if (!usernameOrId) throw new Error("Username or ID required");
+  const cleanParam = String(usernameOrId).trim().replace(/^@/, "");
 
-  if (profs && profs.length > 0) {
-    targetUser = profs[0];
+  let targetUser = null;
+  // Try querying by lowercase username or by ID
+  try {
+    const profs = await supabaseFetch(
+      `/rest/v1/profiles?or=(username.ilike.${encodeURIComponent(cleanParam)},id.eq.${encodeURIComponent(cleanParam)})`,
+      { method: "GET" }
+    );
+    if (profs && profs.length > 0) {
+      targetUser = profs[0];
+    }
+  } catch (err) {
+    // If UUID format mismatch or filter error, fallback to username query only
+    try {
+      const profsByName = await supabaseFetch(
+        `/rest/v1/profiles?username=ilike.${encodeURIComponent(cleanParam)}`,
+        { method: "GET" }
+      );
+      if (profsByName && profsByName.length > 0) {
+        targetUser = profsByName[0];
+      }
+    } catch {
+      // Ignored
+    }
   }
 
   if (!targetUser) {
-    throw new Error("User profile not found in Supabase.");
+    throw new Error(`User profile "@${cleanParam}" not found.`);
   }
 
-  const mediaData = await supabaseFetch(`/rest/v1/media_items?user_id=eq.${targetUser.id}`, { method: "GET" }).catch(() => []);
+  let mediaData = [];
+  try {
+    const rawMedia = await supabaseFetch(`/rest/v1/media_items?user_id=eq.${targetUser.id}&order=created_at.desc`, { method: "GET" });
+    if (rawMedia && Array.isArray(rawMedia)) {
+      mediaData = rawMedia.map(mapMediaItemFromDB);
+    }
+  } catch (err) {
+    console.warn("Could not fetch media items for shared profile:", err);
+  }
 
   const userObj = {
     id: targetUser.id,
     username: targetUser.username,
-    name: targetUser.name,
+    name: targetUser.name || targetUser.username,
     avatar: targetUser.avatar || "🍿",
     avatarBg: targetUser.avatar_bg || "from-red-500 to-amber-500 text-white",
     bio: targetUser.bio || ""

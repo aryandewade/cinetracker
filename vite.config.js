@@ -5,7 +5,7 @@ import https from 'https';
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const TMDB_KEY = env.TMDB_API_KEY || "8265bd1679663a7ea12ac168da84d2e8";
+  const TMDB_KEY = env.TMDB_API_KEY || process.env.TMDB_API_KEY;
 
   return {
     plugins: [
@@ -21,6 +21,12 @@ export default defineConfig(({ mode }) => {
               res.statusCode = 400;
               res.setHeader('Content-Type', 'application/json');
               return res.end(JSON.stringify({ error: 'Query parameter is required' }));
+            }
+
+            if (!TMDB_KEY) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              return res.end(JSON.stringify({ error: 'TMDB_API_KEY is not configured. Please add it to your .env file.' }));
             }
 
             const tmdbUrl = `https://api.tmdb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(query)}`;
@@ -65,6 +71,13 @@ export default defineConfig(({ mode }) => {
             const id = (urlParams.get('id') || '').replace('tmdb-', '');
             const mediaType = urlParams.get('type') === 'series' ? 'tv' : 'movie';
             const appendToResponse = mediaType === 'tv' ? 'credits,content_ratings' : 'credits,release_dates';
+
+            if (!TMDB_KEY) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              return res.end(JSON.stringify({ error: 'TMDB_API_KEY is not configured. Please add it to your .env file.' }));
+            }
+
             const tmdbUrl = `https://api.tmdb.org/3/${mediaType}/${id}?api_key=${TMDB_KEY}&append_to_response=${appendToResponse}`;
 
             https.get(tmdbUrl, (tmdbRes) => {

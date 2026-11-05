@@ -25,7 +25,41 @@ const db = require("./db.cjs");
 const { generateToken, verifyToken, hashPassword, verifyPassword } = require("./jwt.cjs");
 
 const PORT = process.env.PORT || 5000;
-const TMDB_API_KEY = process.env.TMDB_API_KEY || "8265bd1679663a7ea12ac168da84d2e8";
+// No fallback: if the key is missing, TMDB routes are disabled instead of
+// silently shipping a committed key.
+const TMDB_API_KEY = process.env.TMDB_API_KEY;
+const TMDB_ENABLED = Boolean(TMDB_API_KEY);
+
+// Restrict which browser origins may call this API from JavaScript.
+// Set CORS_ORIGIN in production (e.g. https://your-app.netlify.app).
+const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173";
+
+// Simple fixed-window rate limiter (per IP, per bucket).
+// NOTE: single-process / in-memory — fine for dev & small deployments;
+// use a shared store (e.g. Redis) if you scale horizontally.
+const rateBuckets = new Map();
+function rateLimit(ip, bucket, limit, windowMs) {
+  const key = `${bucket}:${ip}`;
+  const now = Date.now();
+  let entry = rateBuckets.get(key);
+  if (!entry || now - entry.start > windowMs) {
+    entry = { start: now, count: 0 };
+    rateBuckets.set(key, entry);
+    if (rateBuckets.size > 5000) {
+      for (const [k, v] of rateBuckets) {
+        if (now - v.start > windowMs) rateBuckets.delete(k);
+      }
+    }
+  }
+  entry.count += 1;
+  return entry.count <= limit;
+}
+
+function clientIp(req) {
+  const fwd = req.headers["x-forwarded-for"];
+  if (fwd) return String(fwd).split(",")[0].trim();
+  return (req.socket && req.socket.remoteAddress) || "unknown";
+}
 
 function fetchHttps(targetUrl) {
   return new Promise((resolve, reject) => {
@@ -43,10 +77,19 @@ function fetchHttps(targetUrl) {
   });
 }
 
-function parseBody(req) {
+function parseBody(req, maxBytes = 1000000) {
   return new Promise((resolve, reject) => {
     let body = "";
+    let size = 0;
     req.on("data", chunk => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        const err = new Error("Payload too large.");
+        err.statusCode = 413;
+        req.destroy();
+        reject(err);
+        return;
+      }
       body += chunk.toString();
     });
     req.on("end", () => {
@@ -63,7 +106,8 @@ function parseBody(req) {
 function sendJson(res, statusCode, data) {
   res.writeHead(statusCode, {
     "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+    "Vary": "Origin",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS"
   });
@@ -82,7 +126,8 @@ function authenticate(req) {
 const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
     res.writeHead(204, {
-      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+      "Vary": "Origin",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS"
     });
@@ -93,11 +138,28 @@ const server = http.createServer(async (req, res) => {
   const path = parsedUrl.pathname;
   const method = req.method;
 
+  // Rate limiting: strict on auth routes (brute-force protection),
+  // moderate on the TMDB proxy (protects the upstream key/quota).
+  const ip = clientIp(req);
+  if (path.startsWith("/api/auth")) {
+    if (!rateLimit(ip, "auth", 20, 60 * 1000)) {
+      return sendJson(res, 429, { error: "Too many requests. Please slow down." });
+    }
+  } else if (path.startsWith("/api/tmdb")) {
+    if (!rateLimit(ip, "tmdb", 60, 60 * 1000)) {
+      return sendJson(res, 429, { error: "Rate limit exceeded for TMDB requests." });
+    }
+  }
+
   try {
     // ----------------------------------------------------
     // TMDB API Secure Proxy Routes (Hides API Key from Browser)
     // ----------------------------------------------------
     if (method === "GET" && path === "/api/tmdb/search") {
+      if (!TMDB_ENABLED) {
+        return sendJson(res, 500, { error: "TMDB_API_KEY is not configured on the server." });
+      }
+
       const searchQuery = parsedUrl.query.query;
       if (!searchQuery) {
         return sendJson(res, 400, { error: "Query parameter is required" });
@@ -127,6 +189,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (method === "GET" && path === "/api/tmdb/details") {
+      if (!TMDB_ENABLED) {
+        return sendJson(res, 500, { error: "TMDB_API_KEY is not configured on the server." });
+      }
+
       const id = parsedUrl.query.id;
       const mediaType = parsedUrl.query.type;
       if (!id) {
@@ -362,7 +428,9 @@ const server = http.createServer(async (req, res) => {
     sendJson(res, 404, { error: "Endpoint not found." });
   } catch (err) {
     console.error("API error:", err);
-    sendJson(res, 500, { error: "Internal server error." });
+    sendJson(res, err.statusCode || 500, {
+      error: err.statusCode ? err.message : "Internal server error."
+    });
   }
 });
 

@@ -20,8 +20,6 @@ const Navbar = ({
   activeTab,
   setActiveTab,
   activeProfile,
-  profiles = [],
-  onSelectProfile,
   onLogout,
   isSharedView = false,
   onExitSharedView,
@@ -29,20 +27,20 @@ const Navbar = ({
   onOpenCommunity,
   authUser = null,
 }) => {
-  const [isDark, setIsDark] = useState(true);
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const stored = localStorage.theme;
+    if (stored) return stored === "dark";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
   const [showDropdown, setShowDropdown] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const dropdownRef = useRef(null);
 
+  // Keep the <html> class in sync with the theme state.
   useEffect(() => {
-    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      setIsDark(true);
-      document.documentElement.classList.add('dark');
-    } else {
-      setIsDark(false);
-      document.documentElement.classList.remove('dark');
-    }
-  }, []);
+    document.documentElement.classList.toggle("dark", isDark);
+  }, [isDark]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -55,15 +53,8 @@ const Navbar = ({
   }, []);
 
   const toggleTheme = () => {
-    if (isDark) {
-      document.documentElement.classList.remove('dark');
-      localStorage.theme = 'light';
-      setIsDark(false);
-    } else {
-      document.documentElement.classList.add('dark');
-      localStorage.theme = 'dark';
-      setIsDark(true);
-    }
+    localStorage.theme = isDark ? "light" : "dark";
+    setIsDark(!isDark);
   };
 
   const getBgForEmoji = (emoji) => {
@@ -75,30 +66,43 @@ const Navbar = ({
     if (!activeProfile) return;
 
     try {
-      const payload = {
-        name: activeProfile.name,
-        avatar: activeProfile.avatar,
-        avatarBg: activeProfile.avatarBg || getBgForEmoji(activeProfile.avatar),
-        bio: activeProfile.bio,
-        data: (activeProfile.data || []).map(i => ({
-          id: i.id,
-          title: i.title,
-          poster: i.poster,
-          type: i.type,
-          watchedOn: i.watchedOn,
-          rating: i.rating,
-          review: i.review,
-          status: i.status
-        }))
-      };
+      let shareUrl = "";
 
-      const base64Data = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-      const shareUrl = `${window.location.origin}${window.location.pathname}?share=${base64Data}`;
+      // If user has a Supabase cloud account with a username, create a permanent clean link
+      if (authUser?.username) {
+        shareUrl = `${window.location.origin}${window.location.pathname}?u=${encodeURIComponent(authUser.username)}`;
+      } else {
+        // Otherwise generate a portable self-contained encoded payload
+        const payload = {
+          name: activeProfile.name || "CineTracker Member",
+          avatar: activeProfile.avatar || "🍿",
+          avatarBg: activeProfile.avatarBg || getBgForEmoji(activeProfile.avatar),
+          bio: activeProfile.bio || "",
+          data: (activeProfile.data || []).map(i => ({
+            id: i.id,
+            title: i.title,
+            poster: i.poster,
+            type: i.type,
+            watchedOn: i.watchedOn,
+            rating: i.rating,
+            review: i.review,
+            status: i.status,
+            episodesWatched: i.episodesWatched,
+            totalEpisodes: i.totalEpisodes
+          }))
+        };
+
+        const base64Data = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+        shareUrl = `${window.location.origin}${window.location.pathname}?share=${base64Data}`;
+      }
 
       navigator.clipboard.writeText(shareUrl).then(() => {
-        setToastMessage("Share Link Copied! 🍿");
+        setToastMessage("Watchlist Link Copied! 🍿");
         setShowDropdown(false);
-        setTimeout(() => setToastMessage(""), 3000);
+        setTimeout(() => setToastMessage(""), 3500);
+      }).catch(() => {
+        // Fallback prompt if clipboard access blocked
+        window.prompt("Copy your share link below:", shareUrl);
       });
     } catch (e) {
       console.error("Failed to generate share link", e);
@@ -118,12 +122,12 @@ const Navbar = ({
 
       <div className="max-w-6xl mx-auto px-6 py-3 flex justify-between items-center">
         {/* Left Side: Brand Logo and Switchable Tabs */}
-        <div className="flex items-center gap-8">
+        <div className="flex items-center gap-6 sm:gap-8">
           <div className="flex items-center gap-3">
             <img
               src={logo}
               alt="CineTrack"
-              className="h-14 w-auto cursor-pointer object-contain hover:scale-105 transition-transform"
+              className="h-12 sm:h-14 w-auto cursor-pointer object-contain hover:scale-105 transition-transform"
               onClick={() => {
                 if (isSharedView) {
                   onExitSharedView();
@@ -134,49 +138,58 @@ const Navbar = ({
             />
           </div>
 
-          {!isSharedView && activeProfile && (
-            <div className="flex gap-4 text-sm font-semibold mt-1">
-              <button
-                onClick={() => setActiveTab('history')}
-                className={`transition-colors py-1 ${activeTab === 'history' ? 'text-text-primary border-b-2 border-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
-              >
-                History
-              </button>
-              <button
-                onClick={() => setActiveTab('watch-later')}
-                className={`transition-colors py-1 ${activeTab === 'watch-later' ? 'text-text-primary border-b-2 border-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
-              >
-                Watch Later
-              </button>
-            </div>
-          )}
+          {/* Tab Switchers: Available in BOTH regular and shared viewer mode */}
+          <div className="flex gap-3 sm:gap-4 text-sm font-semibold mt-1">
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`transition-colors py-1 ${activeTab === 'history' ? 'text-text-primary border-b-2 border-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
+            >
+              History
+            </button>
+            <button
+              onClick={() => setActiveTab('watch-later')}
+              className={`transition-colors py-1 ${activeTab === 'watch-later' ? 'text-text-primary border-b-2 border-text-primary' : 'text-text-secondary hover:text-text-primary'}`}
+            >
+              Watch Later
+            </button>
+          </div>
         </div>
 
-        {/* Right Side: Community, Theme, Stats and Profile Switchers */}
-        <div className="flex items-center gap-3">
+        {/* Right Side: Share, Community, Theme, Stats and Profile Switchers */}
+        <div className="flex items-center gap-2.5 sm:gap-3">
           
           {/* Shared View Return CTA */}
-          {isSharedView && (
+          {isSharedView ? (
             <button
               onClick={onExitSharedView}
               className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-xs px-4 py-2 rounded-full hover:opacity-90 transition-opacity flex items-center gap-1.5 shadow-md shadow-indigo-600/10"
             >
-              <FaExternalLinkAlt size={10} /> Go to My App
+              <FaExternalLinkAlt size={10} /> Create My Watchlist
+            </button>
+          ) : (
+            /* Direct 1-Click Share Button for All Users */
+            <button
+              onClick={handleShareWatchlist}
+              className="flex items-center gap-1.5 text-xs font-semibold py-2 px-3.5 rounded-full bg-emerald-600/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
+              title="Copy shareable link to your watchlist"
+            >
+              <FaShareAlt size={11} />
+              <span>Share</span>
             </button>
           )}
 
           {/* Community Explore Button */}
           <button
             onClick={onOpenCommunity}
-            className="flex items-center gap-1.5 text-xs font-semibold py-2 px-3.5 rounded-full bg-purple-600/10 border border-purple-500/30 text-purple-400 hover:bg-purple-600 hover:text-white transition-all shadow-sm"
+            className="flex items-center gap-1.5 text-xs font-semibold py-2 px-3.5 rounded-full bg-purple-600/10 border border-purple-500/30 text-purple-600 dark:text-purple-400 hover:bg-purple-600 hover:text-white transition-all shadow-sm"
             title="Explore other users and public watchlists"
           >
             <FaUsers size={12} />
-            <span>Community</span>
+            <span className="hidden sm:inline">Community</span>
           </button>
 
           {/* Stats Button */}
-          {!isSharedView && activeTab === 'history' && activeProfile && (
+          {activeTab === 'history' && (
             <button
               onClick={() => setShowStats(!showStats)}
               className={`flex items-center gap-1.5 text-xs font-semibold py-2 px-3.5 rounded-full transition-all border ${
@@ -186,13 +199,14 @@ const Navbar = ({
               }`}
             >
               <FaChartBar size={12} />
-              <span>Stats</span>
+              <span className="hidden sm:inline">Stats</span>
             </button>
           )}
 
           {/* Theme Toggle Button */}
           <button
             onClick={toggleTheme}
+            aria-label="Toggle dark/light theme"
             className="text-text-secondary hover:text-text-primary border border-slate-200/50 dark:border-slate-800 transition-colors p-2.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-900"
           >
             {isDark ? <FaSun size={12} /> : <FaMoon size={12} />}
@@ -200,13 +214,16 @@ const Navbar = ({
 
           {/* Auth Button or Account Dropdown */}
           {!authUser ? (
-            <button
-              onClick={onOpenAuth}
-              className="flex items-center gap-2 text-xs font-bold py-2 px-4 rounded-full bg-white/10 dark:bg-white/10 border border-white/20 dark:border-white/20 text-white backdrop-blur-xl hover:bg-white/20 hover:border-white/40 shadow-lg hover:shadow-red-500/10 transition-all duration-300 group"
-            >
-              <FaUser size={11} className="text-red-400 group-hover:scale-110 transition-transform" />
-              <span>Sign In / Register</span>
-            </button>
+            !isSharedView && (
+              <button
+                onClick={onOpenAuth}
+                className="flex items-center gap-2 text-xs font-bold py-2 px-4 rounded-full bg-white/10 dark:bg-white/10 border border-white/20 dark:border-white/20 text-white backdrop-blur-xl hover:bg-white/20 hover:border-white/40 shadow-lg hover:shadow-red-500/10 transition-all duration-300 group"
+              >
+                <FaUser size={11} className="text-red-400 group-hover:scale-110 transition-transform" />
+                <span className="hidden sm:inline">Sign In / Register</span>
+                <span className="sm:hidden">Sign In</span>
+              </button>
+            )
           ) : (
             /* Profiles & Account Switcher Dropdown */
             !isSharedView && activeProfile && (

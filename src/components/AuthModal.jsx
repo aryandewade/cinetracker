@@ -1,18 +1,8 @@
 import { useState } from "react";
 import { FaTimes, FaUser, FaLock, FaEnvelope, FaFilm, FaExclamationCircle } from "react-icons/fa";
 import { loginUser, registerUser } from "../api/auth";
-
-const PRESET_AVATARS = [
-  { emoji: "🍿", bg: "from-red-500 to-amber-500 text-white" },
-  { emoji: "🎬", bg: "from-slate-700 to-slate-900 text-white" },
-  { emoji: "🎥", bg: "from-blue-500 to-indigo-600 text-white" },
-  { emoji: "🌟", bg: "from-yellow-400 to-orange-500 text-white" },
-  { emoji: "🦁", bg: "from-amber-500 to-yellow-600 text-white" },
-  { emoji: "🚀", bg: "from-purple-600 to-pink-500 text-white" },
-  { emoji: "👾", bg: "from-violet-600 to-fuchsia-600 text-white" },
-  { emoji: "🎨", bg: "from-emerald-400 to-cyan-500 text-white" },
-  { emoji: "👑", bg: "from-yellow-300 to-amber-500 text-white" },
-];
+import useModalA11y, { backdropClick } from "../hooks/useModalA11y";
+import { PRESET_AVATARS } from "../utils/constants";
 
 export default function AuthModal({ isOpen, onClose, onSuccess }) {
   const [mode, setMode] = useState("login"); // 'login' or 'register'
@@ -27,6 +17,8 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
   const [selectedAvatar, setSelectedAvatar] = useState(PRESET_AVATARS[0]);
+
+  const containerRef = useModalA11y({ isOpen, onClose });
 
   if (!isOpen) return null;
 
@@ -71,19 +63,27 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl relative">
+    <div
+      ref={containerRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-label={mode === "login" ? "Sign in to Cinetracker" : "Create a Cinetracker account"}
+      onClick={backdropClick(onClose)}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in outline-none"
+    >
+      <div className="bg-surface dark:bg-slate-900 border border-border dark:border-slate-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl relative outline-none">
         {/* Header */}
-        <div className="p-6 pb-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="p-6 pb-4 border-b border-border dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-red-600/20 text-red-500 flex items-center justify-center text-xl">
               <FaFilm />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white tracking-tight">
+              <h2 className="text-xl font-bold text-text-primary tracking-tight">
                 {mode === "login" ? "Welcome Back to Cinetrack" : "Join Cinetrack"}
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-text-secondary">
                 {mode === "login"
                   ? "Log in to sync your database watchlist"
                   : "Create an account to save & share movies"}
@@ -92,14 +92,14 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-2 rounded-full hover:bg-slate-800 transition-colors"
+            className="text-text-secondary hover:text-text-primary p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <FaTimes />
           </button>
         </div>
 
         {/* Mode Switcher Tabs */}
-        <div className="flex border-b border-slate-800">
+        <div className="flex border-b border-border dark:border-slate-800">
           <button
             type="button"
             onClick={() => {
@@ -108,8 +108,8 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
             }}
             className={`flex-1 py-3 text-sm font-semibold text-center border-b-2 transition-all ${
               mode === "login"
-                ? "border-red-500 text-white bg-slate-800/50"
-                : "border-transparent text-slate-400 hover:text-slate-200"
+                ? "border-red-500 text-text-primary bg-slate-100 dark:bg-slate-800/50"
+                : "border-transparent text-text-secondary hover:text-text-primary"
             }`}
           >
             Sign In
@@ -122,8 +122,8 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
             }}
             className={`flex-1 py-3 text-sm font-semibold text-center border-b-2 transition-all ${
               mode === "register"
-                ? "border-red-500 text-white bg-slate-800/50"
-                : "border-transparent text-slate-400 hover:text-slate-200"
+                ? "border-red-500 text-text-primary bg-slate-100 dark:bg-slate-800/50"
+                : "border-transparent text-text-secondary hover:text-text-primary"
             }`}
           >
             Create Account
@@ -142,35 +142,35 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
           {mode === "login" ? (
             <>
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
                   Email or Username
                 </label>
                 <div className="relative">
-                  <FaUser className="absolute left-3.5 top-3.5 text-slate-500 text-sm" />
+                  <FaUser className="absolute left-3.5 top-3.5 text-text-secondary/60 text-sm" />
                   <input
                     type="text"
                     required
                     placeholder="e.g. moviebuff or name@example.com"
                     value={emailOrUsername}
                     onChange={(e) => setEmailOrUsername(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-red-500 transition-colors"
+                    className="w-full bg-surface dark:bg-slate-950 border border-border dark:border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-red-500 transition-colors"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
                   Password
                 </label>
                 <div className="relative">
-                  <FaLock className="absolute left-3.5 top-3.5 text-slate-500 text-sm" />
+                  <FaLock className="absolute left-3.5 top-3.5 text-text-secondary/60 text-sm" />
                   <input
                     type="password"
                     required
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-red-500 transition-colors"
+                    className="w-full bg-surface dark:bg-slate-950 border border-border dark:border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-red-500 transition-colors"
                   />
                 </div>
               </div>
@@ -178,58 +178,58 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
           ) : (
             <>
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
                   Username
                 </label>
                 <div className="relative">
-                  <FaUser className="absolute left-3.5 top-3.5 text-slate-500 text-sm" />
+                  <FaUser className="absolute left-3.5 top-3.5 text-text-secondary/60 text-sm" />
                   <input
                     type="text"
                     required
                     placeholder="e.g. cinemafan"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-red-500 transition-colors"
+                    className="w-full bg-surface dark:bg-slate-950 border border-border dark:border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-red-500 transition-colors"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
                   Email Address
                 </label>
                 <div className="relative">
-                  <FaEnvelope className="absolute left-3.5 top-3.5 text-slate-500 text-sm" />
+                  <FaEnvelope className="absolute left-3.5 top-3.5 text-text-secondary/60 text-sm" />
                   <input
                     type="email"
                     required
                     placeholder="name@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-red-500 transition-colors"
+                    className="w-full bg-surface dark:bg-slate-950 border border-border dark:border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-red-500 transition-colors"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
                   Password
                 </label>
                 <div className="relative">
-                  <FaLock className="absolute left-3.5 top-3.5 text-slate-500 text-sm" />
+                  <FaLock className="absolute left-3.5 top-3.5 text-text-secondary/60 text-sm" />
                   <input
                     type="password"
                     required
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-red-500 transition-colors"
+                    className="w-full bg-surface dark:bg-slate-950 border border-border dark:border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-red-500 transition-colors"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
                   Display Name (Optional)
                 </label>
                 <input
@@ -237,12 +237,12 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                   placeholder="e.g. Alex Morgan"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-red-500 transition-colors"
+                  className="w-full bg-surface dark:bg-slate-950 border border-border dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-red-500 transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
                   Choose Avatar Emoji
                 </label>
                 <div className="grid grid-cols-5 gap-2">
@@ -253,8 +253,8 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                       onClick={() => setSelectedAvatar(av)}
                       className={`h-11 rounded-xl flex items-center justify-center text-xl transition-all ${
                         selectedAvatar.emoji === av.emoji
-                          ? "ring-2 ring-red-500 scale-105 bg-slate-800"
-                          : "bg-slate-950 hover:bg-slate-800/80"
+                          ? "ring-2 ring-red-500 scale-105 bg-slate-200 dark:bg-slate-800"
+                          : "bg-surface dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-800/80"
                       }`}
                     >
                       {av.emoji}
@@ -264,7 +264,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
                   Bio (Optional)
                 </label>
                 <textarea
@@ -272,7 +272,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
                   placeholder="Tell others what movies you enjoy..."
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-red-500 transition-colors resize-none"
+                  className="w-full bg-surface dark:bg-slate-950 border border-border dark:border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-red-500 transition-colors resize-none"
                 />
               </div>
             </>
@@ -281,7 +281,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-2 py-3 bg-white/10 hover:bg-white/15 border border-white/20 hover:border-white/30 backdrop-blur-xl font-bold rounded-xl text-white shadow-xl transition-all duration-300 disabled:opacity-50 hover:shadow-red-500/10"
+            className="w-full mt-2 py-3 bg-text-primary text-background font-bold rounded-xl shadow-xl transition-all duration-300 hover:opacity-90 disabled:opacity-50"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">

@@ -1,6 +1,15 @@
 const crypto = require("crypto");
 
-const JWT_SECRET = process.env.JWT_SECRET || "cinetracker_jwt_secret_key_2026_super_secure";
+// Fail fast: never run with a guessable default secret.
+// (server/index.cjs loads .env before requiring this module.)
+if (!process.env.JWT_SECRET) {
+  throw new Error(
+    "JWT_SECRET is not set. Refusing to start with a default secret — " +
+      "add JWT_SECRET to your .env file and keep it out of version control."
+  );
+}
+
+const JWT_SECRET = process.env.JWT_SECRET;
 
 function base64UrlEncode(str) {
   return Buffer.from(str)
@@ -44,6 +53,15 @@ function verifyToken(token) {
   if (parts.length !== 3) return null;
 
   const [encodedHeader, encodedPayload, signature] = parts;
+
+  // Only accept tokens signed with the algorithm we actually use.
+  try {
+    const header = JSON.parse(base64UrlDecode(encodedHeader));
+    if (!header || header.alg !== "HS256") return null;
+  } catch (err) {
+    return null;
+  }
+
   const data = `${encodedHeader}.${encodedPayload}`;
 
   const expectedSignature = crypto
@@ -54,7 +72,15 @@ function verifyToken(token) {
     .replace(/\+/g, "-")
     .replace(/\//g, "_");
 
-  if (signature !== expectedSignature) return null;
+  // Timing-safe signature comparison (length-safe).
+  const sigBuf = Buffer.from(signature);
+  const expectedBuf = Buffer.from(expectedSignature);
+  if (
+    sigBuf.length !== expectedBuf.length ||
+    !crypto.timingSafeEqual(sigBuf, expectedBuf)
+  ) {
+    return null;
+  }
 
   try {
     const payload = JSON.parse(base64UrlDecode(encodedPayload));

@@ -23,13 +23,14 @@ CREATE TABLE IF NOT EXISTS public.media_items (
   poster TEXT,
   type TEXT,
   status TEXT,
-  rating NUMERIC DEFAULT 0,
+  rating TEXT,
   review TEXT,
   watched_on TEXT,
   seasons JSONB,
   episodes_watched INTEGER DEFAULT 0,
   total_episodes INTEGER DEFAULT 0,
   notes TEXT,
+  is_public BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -92,3 +93,43 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- ============================================================
+-- 7. Privacy Hardening (run after the sections above)
+-- ============================================================
+
+-- 7a. Hide user emails from direct table reads (PII protection).
+--     Community features still read the public profile columns;
+--     login-by-username now uses the security-definer RPC in 7c.
+REVOKE ALL ON public.profiles FROM anon, authenticated;
+GRANT SELECT (id, username, name, avatar, avatar_bg, bio, created_at, updated_at)
+  ON public.profiles TO anon, authenticated;
+GRANT INSERT (id, username, email, name, avatar, avatar_bg, bio), 
+      UPDATE (username, email, name, avatar, avatar_bg, bio, updated_at)
+  ON public.profiles TO authenticated;
+
+-- 7b. Media items: add an explicit public flag instead of making every
+--     row (including "private" notes) world-readable by default.
+ALTER TABLE public.media_items ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT true;
+
+DROP POLICY IF EXISTS "Public media items are viewable by everyone" ON public.media_items;
+CREATE POLICY "Public showcase media items are viewable by everyone" ON public.media_items
+  FOR SELECT USING (is_public = true OR auth.uid() = user_id);
+
+-- 7c. Username -> email resolution for login, without exposing the email
+--     column to direct REST reads.
+CREATE OR REPLACE FUNCTION public.get_login_email(p_username TEXT)
+RETURNS TEXT
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT email
+  FROM public.profiles
+  WHERE lower(username) = lower(p_username)
+  LIMIT 1;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_login_email(TEXT) TO anon, authenticated;
+

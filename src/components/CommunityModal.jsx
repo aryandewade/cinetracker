@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
-import { FaTimes, FaUsers, FaFilm, FaStar, FaEye, FaSearch, FaUserCircle } from "react-icons/fa";
+import { FaTimes, FaUsers, FaFilm, FaStar, FaEye, FaSearch, FaUserCircle, FaShareAlt, FaCheck } from "react-icons/fa";
 import { fetchAllUsers, fetchUserProfile } from "../api/media";
+import useModalA11y, { backdropClick } from "../hooks/useModalA11y";
 
 export default function CommunityModal({ isOpen, onClose, onSelectSharedUser }) {
+  const containerRef = useModalA11y({ isOpen, onClose });
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedUserDetail, setSelectedUserDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [copiedId, setCopiedId] = useState(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -44,6 +46,15 @@ export default function CommunityModal({ isOpen, onClose, onSelectSharedUser }) 
     }
   };
 
+  const handleCopyUserLink = (user) => {
+    const username = user.username || user.id;
+    const shareUrl = `${window.location.origin}${window.location.pathname}?u=${encodeURIComponent(username)}`;
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      setCopiedId(user.id);
+      setTimeout(() => setCopiedId(null), 3000);
+    });
+  };
+
   if (!isOpen) return null;
 
   const filteredUsers = (users || []).filter(
@@ -55,26 +66,35 @@ export default function CommunityModal({ isOpen, onClose, onSelectSharedUser }) 
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in text-white">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+    <div
+      ref={containerRef}
+      tabIndex={-1}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Community and member profiles"
+      onClick={backdropClick(onClose)}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in text-white outline-none"
+    >
+      <div className="bg-surface dark:bg-slate-900 border border-border dark:border-slate-800 rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
         {/* Header */}
-        <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+        <div className="p-6 border-b border-border dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-purple-600/20 text-purple-400 flex items-center justify-center text-xl">
               <FaUsers />
             </div>
             <div>
-              <h2 className="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-200 to-purple-400 bg-clip-text text-transparent">
-                Community & Member Profiles
+              <h2 className="text-xl font-bold tracking-tight bg-gradient-to-r from-slate-900 via-slate-700 to-purple-600 dark:from-white dark:via-slate-200 dark:to-purple-400 bg-clip-text text-transparent">
+                Community &amp; Member Profiles
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-text-secondary">
                 Explore movie collections and reviews shared by other users
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-2 rounded-full hover:bg-slate-800 transition-colors"
+            aria-label="Close community browser"
+            className="text-text-secondary hover:text-text-primary p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <FaTimes />
           </button>
@@ -83,13 +103,14 @@ export default function CommunityModal({ isOpen, onClose, onSelectSharedUser }) 
         {/* Search Filter Bar */}
         <div className="px-6 pt-4 pb-2">
           <div className="relative">
-            <FaSearch className="absolute left-4 top-3.5 text-slate-500 text-sm" />
+            <FaSearch className="absolute left-4 top-3.5 text-text-secondary/50 text-sm" aria-hidden="true" />
             <input
               type="text"
+              aria-label="Search community members"
               placeholder="Search members by username or name..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-2xl pl-11 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition-colors"
+              className="w-full bg-surface dark:bg-slate-950 border border-border dark:border-slate-800 rounded-2xl pl-11 pr-4 py-2.5 text-sm text-text-primary placeholder-text-secondary/50 focus:outline-none focus:border-purple-500 transition-colors"
             />
           </div>
         </div>
@@ -97,22 +118,22 @@ export default function CommunityModal({ isOpen, onClose, onSelectSharedUser }) 
         {/* User Grid Content */}
         <div className="p-6 overflow-y-auto flex-1">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+            <div className="flex flex-col items-center justify-center py-16 text-text-secondary">
               <div className="animate-spin rounded-full h-10 w-10 border-2 border-purple-500 border-t-transparent mb-4" />
               <p className="text-sm">Loading community members...</p>
             </div>
           ) : filteredUsers.length === 0 ? (
-            <div className="text-center py-16 text-slate-400">
-              <FaUserCircle className="mx-auto text-5xl mb-3 text-slate-600" />
-              <p className="font-semibold text-slate-300">No users found</p>
-              <p className="text-xs mt-1 text-slate-500">Try searching for a different name</p>
+            <div className="text-center py-16 text-text-secondary">
+              <FaUserCircle className="mx-auto text-5xl mb-3 text-text-secondary/50" />
+              <p className="font-semibold text-text-primary">No users found</p>
+              <p className="text-xs mt-1 text-text-secondary/70">Try searching for a different name</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredUsers.map((u) => (
                 <div
                   key={u.id}
-                  className="bg-slate-950/60 border border-slate-800/80 hover:border-purple-500/50 p-5 rounded-2xl transition-all duration-300 flex flex-col justify-between hover:shadow-xl group"
+                  className="bg-surface dark:bg-slate-950/60 border border-border dark:border-slate-800/80 hover:border-purple-500/50 p-5 rounded-2xl transition-all duration-300 flex flex-col justify-between hover:shadow-xl group"
                 >
                   <div className="flex items-start gap-4">
                     <div
@@ -123,37 +144,48 @@ export default function CommunityModal({ isOpen, onClose, onSelectSharedUser }) 
                       {u.avatar || "🍿"}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="font-bold text-base text-white truncate group-hover:text-purple-300 transition-colors">
+                      <h3 className="font-bold text-base text-text-primary truncate group-hover:text-purple-600 dark:group-hover:text-purple-300 transition-colors">
                         {u.name}
                       </h3>
-                      <p className="text-xs text-purple-400 font-mono">@{u.username}</p>
-                      <p className="text-xs text-slate-400 mt-1.5 line-clamp-2 leading-relaxed">
+                      <p className="text-xs text-purple-600 dark:text-purple-400 font-mono">@{u.username}</p>
+                      <p className="text-xs text-text-secondary mt-1.5 line-clamp-2 leading-relaxed">
                         {u.bio || "Movie fan on Cinetrack."}
                       </p>
                     </div>
                   </div>
 
                   {/* Stats & View Action */}
-                  <div className="mt-4 pt-3 border-t border-slate-800/60 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-3 text-slate-400">
+                  <div className="mt-4 pt-3 border-t border-border dark:border-slate-800/60 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-3 text-text-secondary">
                       <span className="flex items-center gap-1">
-                        <FaFilm className="text-purple-400" />
-                        <strong className="text-white">{u.stats?.watched || 0}</strong> watched
+                        <FaFilm className="text-purple-500 dark:text-purple-400" />
+                        <strong className="text-text-primary">{u.stats?.watched || 0}</strong> watched
                       </span>
                       <span className="flex items-center gap-1">
                         <FaStar className="text-amber-400" />
-                        <strong className="text-white">{u.stats?.total || 0}</strong> total
+                        <strong className="text-text-primary">{u.stats?.total || 0}</strong> total
                       </span>
                     </div>
 
-                    <button
-                      onClick={() => handleInspectUser(u)}
-                      disabled={loadingDetail}
-                      className="px-3.5 py-1.5 bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white rounded-xl font-semibold flex items-center gap-1.5 transition-all text-xs"
-                    >
-                      <FaEye />
-                      View Profile
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleCopyUserLink(u)}
+                        title="Copy direct share link to this profile"
+                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl transition-all flex items-center gap-1 text-xs"
+                      >
+                        {copiedId === u.id ? <FaCheck className="text-emerald-400" /> : <FaShareAlt size={10} />}
+                        <span>{copiedId === u.id ? "Copied" : "Link"}</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleInspectUser(u)}
+                        disabled={loadingDetail}
+                        className="px-3.5 py-1.5 bg-purple-600/20 hover:bg-purple-600 text-purple-600 dark:text-purple-300 hover:text-white rounded-xl font-semibold flex items-center gap-1.5 transition-all text-xs"
+                      >
+                        <FaEye />
+                        View
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

@@ -10,6 +10,17 @@
       "avatarBg": "from-red-500 to-amber-500 text-white",
       "bio": "Movie & TV enthusiast tracking favorites on Cinetracker.",
       "createdAt": "2026-07-25T17:09:48.403Z"
+    },
+    {
+      "id": "usr_1789489881967_qz2pg",
+      "username": "testuser_1789489881965",
+      "email": "test_1789489881965@example.com",
+      "passwordHash": "4e38a4b881de4b783127d5c70530014d:c5548b010cc76a1035b380fb2d4da5c8efb4f10741cfcc599dc330032662ba1ac2e219afcfc506bd6793310d5cb7e413a6f576b50b31b7dfb602069b05f2d2f9",
+      "name": "Test User",
+      "avatar": "🎬",
+      "avatarBg": "from-red-500 to-amber-500 text-white",
+      "bio": "Testing database integration.",
+      "createdAt": "2026-09-15T16:31:21.967Z"
     }
   ],
   "media": [
@@ -25,6 +36,17 @@
       "userId": "usr_1784999388403_jf5xn",
       "updatedAt": "2026-07-25T17:09:48.450Z",
       "createdAt": "2026-07-25T17:09:48.450Z"
+    },
+    {
+      "title": "Inception",
+      "type": "movie",
+      "status": "watched",
+      "rating": 5,
+      "review": "Mindbending masterpiece!",
+      "id": "m_1789489881970_8s054",
+      "userId": "usr_1789489881967_qz2pg",
+      "updatedAt": "2026-09-15T16:31:21.970Z",
+      "createdAt": "2026-09-15T16:31:21.970Z"
     }
   ]
 }
